@@ -1,0 +1,21 @@
+# Node.js
+front_end/node_modules/
+front_end/.next/
+front_end/npm_run.log
+
+# Python
+Backend/venv/
+Backend/__pycache__/
+Backend/*.pyc
+Backend/*.log
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+
+# Large binaries (optional, but usually good to ignore)
+# Backend/go2rtc
+# Backend/yolov8n.pt
