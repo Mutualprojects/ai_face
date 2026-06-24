@@ -87,7 +87,7 @@ export default function Home() {
 
       {/* Main */}
       <main style={{ maxWidth:1400, margin:"0 auto", padding:"28px 24px" }}>
-        <WebRTCStream key={activeCameraId} streamName={activeCameraId} serverPort="1984" />
+        <WebRTCStream key={activeCameraId} streamName={activeCameraId} serverPort="8889" />
       </main>
 
       <footer style={{ borderTop:"1px solid var(--border)", padding:"16px 24px", textAlign:"center",

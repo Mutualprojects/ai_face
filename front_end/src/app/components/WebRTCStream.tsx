@@ -47,7 +47,7 @@ function Chip({ dot, label }: { dot: string; label: string }) {
   );
 }
 
-export default function WebRTCStream({ streamName = "camera1", serverPort = "1984" }: Props) {
+export default function WebRTCStream({ streamName = "camera1", serverPort = "8889" }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef    = useRef<RTCPeerConnection | null>(null);
   const wsRef    = useRef<WebSocket | null>(null);
@@ -131,7 +131,8 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
   const startHLS = useCallback(() => {
     cleanup(); setPS("connecting"); setErrMsg("");
     const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    const url  = `http://${host}:${serverPort}/api/stream.m3u8?src=${streamName}`;
+    const hlsPort = "8888"; // MediaMTX default HLS port
+    const url  = `http://${host}:${hlsPort}/${streamName}/index.m3u8`;
     const v    = videoRef.current; if (!v) return;
     if (Hls.isSupported()) {
       const hls = new Hls({ lowLatencyMode:true, maxBufferLength:4, backBufferLength:0, liveSyncDurationCount:1 });
@@ -146,7 +147,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
       });
     } else { setPS("error"); setErrMsg("HLS not supported."); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cleanup, serverPort, streamName]);
+  }, [cleanup, streamName]);
 
   // ── WebRTC ───────────────────────────────────────────────────
   const startWebRTC = useCallback(() => {
@@ -155,7 +156,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
     const alive   = () => session === sessionRef.current; // true if still valid
 
     const host  = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    const wsUrl = `ws://${host}:${serverPort}/api/ws?src=${streamName}`;
+    const webrtcUrl = `http://${host}:${serverPort}/${streamName}/whep`;
     const fallback = (msg: string) => {
       if (!alive()) return;                       // stale — ignore
       console.warn(msg); cleanup(); setM("hls"); startHLS();
@@ -186,29 +187,27 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
         }
       };
 
-      const ws = new WebSocket(wsUrl); wsRef.current = ws;
-      ws.onopen = () => {
-        if (!alive()) { ws.close(); return; }
-        pc.onicecandidate = ev => {
-          if (ev.candidate && ws.readyState === WebSocket.OPEN)
-            ws.send(JSON.stringify({ type:"webrtc/candidate", value: ev.candidate.candidate }));
-        };
-        pc.createOffer({ offerToReceiveVideo:true })
-          .then(o => pc.setLocalDescription(o))
-          .then(() => { if (alive() && ws.readyState === WebSocket.OPEN)
-            ws.send(JSON.stringify({ type:"webrtc/offer", value: pc.localDescription?.sdp })); })
-          .catch(e => fallback(`Offer: ${e.message}`));
-      };
-      ws.onmessage = ev => {
-        if (!alive()) return;
-        try {
-          const m = JSON.parse(ev.data);
-          if (m.type === "webrtc/candidate") pc.addIceCandidate({ candidate:m.value, sdpMid:"0" }).catch(()=>{});
-          else if (m.type === "webrtc/answer") pc.setRemoteDescription({ type:"answer", sdp:m.value }).catch(e => fallback(`SDP: ${e.message}`));
-          else if (m.type === "error") fallback(m.value || "signal error");
-        } catch {}
-      };
-      ws.onerror = () => fallback("WS error");
+      pc.createOffer()
+        .then(o => pc.setLocalDescription(o))
+        .then(() => {
+          if (!alive()) return;
+          return fetch(webrtcUrl, {
+            method: 'POST',
+            body: pc.localDescription?.sdp,
+            headers: { 'Content-Type': 'application/sdp' }
+          });
+        })
+        .then(res => {
+          if (!res) return;
+          if (!res.ok) throw new Error("MediaMTX WHEP offer rejected");
+          return res.text();
+        })
+        .then(sdpAnswer => {
+          if (!alive() || !sdpAnswer) return;
+          pc.setRemoteDescription({ type: 'answer', sdp: sdpAnswer }).catch(e => fallback(`SDP: ${e.message}`));
+        })
+        .catch(e => fallback(e.message));
+        
     } catch (e: any) { fallback(e.message); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanup, startHLS, serverPort, streamName]);
@@ -223,8 +222,9 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
     try {
       const host = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
       const apiHost = host === "localhost" ? "127.0.0.1" : host;
-      const r = await fetch(`http://${apiHost}:${serverPort}/api/streams`, { signal: AbortSignal.timeout(3000) });
-      setRtcOk(r.ok);
+      // MediaMTX has an API on port 9997 by default, but we can just check if WebRTC responds to ping
+      const r = await fetch(`http://${apiHost}:${serverPort}/`, { method: "OPTIONS", signal: AbortSignal.timeout(3000) });
+      setRtcOk(true); // MediaMTX is responsive
     } catch { setRtcOk(false); }
   };
 
@@ -433,7 +433,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
 
             {/* Status chips */}
             <Chip dot={rtcOk === true ? "var(--green)" : rtcOk === false ? "var(--red)" : "var(--amber)"}
-              label={`go2rtc ${rtcOk === true ? "OK" : rtcOk === false ? "Down" : "…"}`} />
+              label={`MediaMTX ${rtcOk === true ? "OK" : rtcOk === false ? "Down" : "…"}`} />
             <Chip dot={dbOk === true ? "var(--green)" : dbOk === false ? "var(--red)" : "var(--amber)"}
               label={`DB ${dbOk === true ? "Connected" : dbOk === false ? "Error" : "…"}`} />
             <Chip dot={modelOk === true ? "var(--green)" : "var(--red)"}
@@ -583,10 +583,10 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
                   <>
                     <div style={{ fontSize:36 }}>📡</div>
                     <div style={{ textAlign:"center" }}>
-                      <div style={{ fontWeight:700, fontSize:15, color:"var(--red)" }}>go2rtc Offline</div>
+                      <div style={{ fontWeight:700, fontSize:15, color:"var(--red)" }}>MediaMTX Offline</div>
                       <div style={{ fontSize:11, color:"var(--text-muted)", fontFamily:"monospace",
                         background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"4px 10px", marginTop:8 }}>
-                        ./go2rtc -config go2rtc.yaml
+                        ./mediamtx mediamtx.yml
                       </div>
                     </div>
                     <button onClick={retry} style={{ background:"var(--violet)", color:"#fff",
@@ -617,7 +617,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "198
             background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)",
             borderRadius:8, padding:"8px 14px" }}>
             <span style={{ color:"rgba(255,255,255,0.3)" }}>SOURCE </span>
-            rtsp://admin:***@172.21.2.17:554/rtsp/streaming · go2rtc:{serverPort} · {mode.toUpperCase()}
+            rtsp://admin:***@172.21.2.17:554/rtsp/streaming · mediamtx:{serverPort} · {mode.toUpperCase()}
           </div>
         </div>
 

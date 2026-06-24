@@ -73,13 +73,13 @@ if face_app is None:
     print("ERROR: No InsightFace model could be loaded.")
 
 # ── Load YOLOv8 Model (For Body Detection) ──────────────────
-print("Loading YOLOv8n model for body detection...")
+print("Loading Fire & Smoke model...")
 try:
     from ultralytics import YOLO
-    yolo_app = YOLO("yolov8n.pt")
-    print("YOLOv8n model loaded successfully.")
+    yolo_app = YOLO("/home/btl/fire_&_smoke/best.pt")
+    print("Fire & Smoke model loaded successfully.")
 except Exception as e:
-    print(f"ERROR: Could not load YOLOv8n model: {e}")
+    print(f"ERROR: Could not load Fire & Smoke model: {e}")
     yolo_app = None
 
 
@@ -173,11 +173,11 @@ if supabase is not None:
 
 
 # ──────────────────────────────────────────────────────────
-# GO2RTC STREAM UTILS
+# MEDIAMTX STREAM UTILS
 # ──────────────────────────────────────────────────────────
-GO2RTC_YAML   = os.path.join(os.path.dirname(__file__), "go2rtc.yaml")
-GO2RTC_BIN    = os.path.join(os.path.dirname(__file__), "go2rtc")
-GO2RTC_LOG    = os.path.join(os.path.dirname(__file__), "go2rtc_run.log")
+MEDIAMTX_YAML = os.path.join(os.path.dirname(__file__), "mediamtx.yml")
+MEDIAMTX_BIN  = os.path.join(os.path.dirname(__file__), "mediamtx")
+MEDIAMTX_LOG  = os.path.join(os.path.dirname(__file__), "mediamtx_run.log")
 
 def detect_codec(rtsp_url: str) -> str:
     """Probe the RTSP stream to detect its video codec."""
@@ -198,143 +198,120 @@ def detect_codec(rtsp_url: str) -> str:
         print(f"ffprobe failed: {e}")
         return "unknown"
 
-def build_go2rtc_src(rtsp_url: str) -> str:
-    """Build the correct go2rtc stream source string.
-    HEVC cameras need ffmpeg exec transcode; H.264 cameras can use raw RTSP.
-    Always uses the decoded URL (no percent-encoding) in the exec command.
-    """
+def build_mediamtx_src(rtsp_url: str) -> dict:
+    """Build the mediamtx stream configuration dictionary."""
     from urllib.parse import unquote
     decoded_url = unquote(rtsp_url)
     codec = detect_codec(decoded_url)
     if codec in ("hevc", "h265"):
-        print(f"HEVC detected — will use ffmpeg transcode")
-        return (
-            f"exec:ffmpeg -hide_banner -avoid_negative_ts make_zero "
-            f"-fflags nobuffer -flags low_delay "
-            f"-rtsp_transport tcp -i '{decoded_url}' "
-            f"-c:v libx264 -preset ultrafast -tune zerolatency "
-            f"-an -rtsp_transport tcp -f rtsp {{output}}"
-        )
-    return decoded_url
+        print(f"HEVC detected — will use ffmpeg transcode via runOnInit")
+        # MediaMTX will spawn ffmpeg on init, which pulls the stream and publishes it to this path.
+        return {
+            "source": "publisher",
+            "runOnInit": f"ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags low_delay -rtsp_transport tcp -i '{decoded_url}' -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH",
+            "runOnInitRestart": True
+        }
+    return {"source": decoded_url}
 
-def write_go2rtc_yaml_entry(camera_id: str, src: str):
-    """Add or update a stream entry in go2rtc.yaml."""
+def write_mediamtx_yaml_entry(camera_id: str, cfg_dict: dict):
+    """Add or update a stream entry in mediamtx.yml."""
     try:
-        # Read existing YAML manually to preserve formatting
-        with open(GO2RTC_YAML, "r") as f:
-            content = f.read()
+        import yaml
+        with open(MEDIAMTX_YAML, "r") as f:
+            cfg = yaml.safe_load(f) or {}
 
-        # Remove any existing entry for this camera_id
-        lines = content.splitlines(keepends=True)
-        filtered = []
-        skip = False
-        for line in lines:
-            if line.strip().startswith(f"{camera_id}:"):
-                skip = True
-                continue
-            if skip and (line.startswith("  ") and line.strip().startswith("-")):
-                continue
-            skip = False
-            filtered.append(line)
-        content = "".join(filtered).rstrip()
+        if "paths" not in cfg:
+            cfg["paths"] = {}
+        if cfg["paths"] is None:
+            cfg["paths"] = {}
 
-        # Append the new entry
-        if src.startswith("exec:"):
-            content += f"\n  {camera_id}:\n    - {src}\n"
-        else:
-            content += f"\n  {camera_id}: {src}\n"
+        cfg["paths"][camera_id] = cfg_dict
 
-        with open(GO2RTC_YAML, "w") as f:
-            f.write(content)
-        print(f"go2rtc.yaml updated for '{camera_id}'")
+        with open(MEDIAMTX_YAML, "w") as f:
+            yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+        print(f"mediamtx.yml updated for '{camera_id}'")
     except Exception as e:
-        print(f"Failed to update go2rtc.yaml: {e}")
+        print(f"Failed to update mediamtx.yml: {e}")
 
-def restart_go2rtc():
-    """Kill existing go2rtc process and restart with updated YAML."""
+def restart_mediamtx():
+    """Kill existing mediamtx process and restart with updated YAML."""
     import time
     try:
-        subprocess.run(["pkill", "-f", "go2rtc"], timeout=3, capture_output=True)
+        subprocess.run(["pkill", "-f", "mediamtx"], timeout=3, capture_output=True)
         time.sleep(0.8)
-        # Use a detached shell command to ensure go2rtc survives the python request lifecycle
         subprocess.Popen(
-            f"nohup {GO2RTC_BIN} -config {GO2RTC_YAML} > {GO2RTC_LOG} 2>&1 &",
+            f"nohup {MEDIAMTX_BIN} {MEDIAMTX_YAML} > {MEDIAMTX_LOG} 2>&1 &",
             shell=True,
             start_new_session=True
         )
-        time.sleep(1.5)  # Give go2rtc time to load all streams
-        print("go2rtc restarted with updated config")
+        time.sleep(1.5)  # Give mediamtx time to load all streams
+        print("mediamtx restarted with updated config")
     except Exception as e:
-        print(f"Failed to restart go2rtc: {e}")
+        print(f"Failed to restart mediamtx: {e}")
 
-def remove_go2rtc_yaml_entry(camera_id: str):
-    """Remove a stream entry from go2rtc.yaml."""
+def remove_mediamtx_yaml_entry(camera_id: str):
+    """Remove a stream entry from mediamtx.yml."""
     try:
         import yaml
-        with open(GO2RTC_YAML, "r") as f:
+        with open(MEDIAMTX_YAML, "r") as f:
             cfg = yaml.safe_load(f) or {}
-        if "streams" in cfg and camera_id in cfg["streams"]:
-            del cfg["streams"][camera_id]
-            with open(GO2RTC_YAML, "w") as f:
+        if "paths" in cfg and cfg["paths"] and camera_id in cfg["paths"]:
+            del cfg["paths"][camera_id]
+            with open(MEDIAMTX_YAML, "w") as f:
                 yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
-            print(f"go2rtc.yaml: removed '{camera_id}'")
+            print(f"mediamtx.yml: removed '{camera_id}'")
     except Exception as e:
-        print(f"Failed to remove from go2rtc.yaml: {e}")
+        print(f"Failed to remove from mediamtx.yml: {e}")
 
 def sync_cameras_to_db():
     """
-    At startup, read go2rtc.yaml and make sure every stream entry
+    At startup, read mediamtx.yml and make sure every stream entry
     also exists as a row in the Supabase 'cameras' table.
-    This fixes the case where camera1 (or any manually-added stream)
-    is in go2rtc.yaml but was never inserted into the DB,
-    so the frontend dropdown never showed it.
     """
     if supabase is None:
         return
     try:
-        import yaml, re
+        import yaml
         from urllib.parse import unquote
 
-        with open(GO2RTC_YAML, "r") as f:
+        with open(MEDIAMTX_YAML, "r") as f:
             cfg = yaml.safe_load(f) or {}
 
-        streams = cfg.get("streams", {})
-        if not streams:
+        paths = cfg.get("paths", {})
+        if not paths:
             return
 
         # Fetch existing camera IDs from Supabase so we can skip those
         existing = supabase.table("cameras").select("id").execute()
         existing_ids = {row["id"] for row in (existing.data or [])}
 
-        # Known friendly names for well-known stream IDs
         KNOWN_NAMES = {
             "camera1": ("Default Camera", "Main Entrance"),
         }
 
         inserted = 0
-        for cam_id, src in streams.items():
+        for cam_id, info in paths.items():
             if cam_id in existing_ids:
-                continue  # already in DB — skip
-
-            # Extract the RTSP URL from the stream source string
-            rtsp_url = ""
-            if isinstance(src, list):
-                src_str = src[0] if src else ""
-            else:
-                src_str = str(src)
-
-            # exec:ffmpeg ... -i 'rtsp://...' ...  or  exec:ffmpeg ... -i "rtsp://..." ...
-            match = re.search(r'-i\s+[\'"]?(rtsp://[^\s\'"]+)[\'"]?', src_str)
-            if match:
-                rtsp_url = unquote(match.group(1))
-            elif src_str.startswith("rtsp://"):
-                rtsp_url = unquote(src_str)
-
-            if not rtsp_url:
-                print(f"[Sync] Could not extract RTSP URL for '{cam_id}' — skipping")
                 continue
 
-            # Build a friendly name from known list or from the camera_id
+            if not isinstance(info, dict):
+                continue
+                
+            src_str = ""
+            if "source" in info and info["source"] != "publisher":
+                src_str = info["source"]
+            elif "runOnInit" in info:
+                # Extract URL from ffmpeg command
+                import re
+                match = re.search(r'-i\s+[\'"]?(rtsp://[^\s\'"]+)[\'"]?', info["runOnInit"])
+                if match:
+                    src_str = match.group(1)
+            
+            if not src_str:
+                continue
+                
+            rtsp_url = unquote(src_str)
+
             if cam_id in KNOWN_NAMES:
                 name, place = KNOWN_NAMES[cam_id]
             else:
@@ -347,28 +324,22 @@ def sync_cameras_to_db():
                 "place":    place,
                 "rtsp_url": rtsp_url,
             }).execute()
-            print(f"[Sync] Inserted missing camera '{cam_id}' ({name}) into Supabase")
+            print(f"[Sync] Inserted missing camera '{cam_id}' into Supabase")
             inserted += 1
 
-        if inserted == 0:
-            print("[Sync] All go2rtc streams already present in Supabase cameras table.")
-        else:
+        if inserted > 0:
             print(f"[Sync] Synced {inserted} camera(s) to Supabase.")
 
     except Exception as e:
         print(f"[Sync] Camera sync failed: {e}")
 
-# Run startup camera sync so go2rtc.yaml and Supabase are always in agreement
 sync_cameras_to_db()
-
-# Ensure go2rtc is running at startup
-restart_go2rtc()
+restart_mediamtx()
 
 # ── Camera Background Workers ─────────────────────────────────────────────────
-# Each active camera gets a daemon thread that reads HD frames from the go2rtc
-# RTSP restream at rtsp://localhost:8554/<camera_id> (already transcoded H264).
-# This means:
-#   • HD full-resolution frames — much better accuracy than 640px browser canvas
+# Each active camera gets a daemon thread that reads HD frames from MediaMTX's
+# RTSP stream. This prevents sending frames over HTTP.
+#
 #   • Backend controls the processing rate — no browser CPU wasted
 #   • Supabase face_logs only written on MATCH — drastically fewer DB writes
 #   • Frontend becomes a pure display layer (WebRTC + polling /api/detections)
@@ -419,11 +390,11 @@ WORKERS_LOCK = threading.Lock()
 
 
 class CameraWorker:
-    """Background thread that reads RTSP frames and runs InsightFace."""
+    """Background thread that reads RTSP frames via OpenCV."""
 
     def __init__(self, camera_id: str):
         self.camera_id  = camera_id
-        self.url        = f"http://localhost:1984/api/frame.jpeg?src={camera_id}"
+        self.url        = f"rtsp://localhost:8554/{camera_id}"
         self._stop      = threading.Event()
         self._thread    = threading.Thread(target=self._run, daemon=True,
                                            name=f"worker-{camera_id}")
@@ -438,31 +409,44 @@ class CameraWorker:
 
     # ── internal ──────────────────────────────────────────────────────────────
     def _run(self):
-        import urllib.request
-        import numpy as np
+        import time
+        import cv2
 
-        print(f"[Worker {self.camera_id}] HTTP snapshot fetch loop started.")
+        print(f"[Worker {self.camera_id}] OpenCV RTSP capture loop started.")
+        cap = None
+        
+        last_process_time = 0
 
         while not self._stop.is_set():
             try:
-                # Fetch frame snapshot from go2rtc HTTP API
-                with urllib.request.urlopen(self.url, timeout=5) as response:
-                    image_bytes = response.read()
-                
-                image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-                frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                if cap is None or not cap.isOpened():
+                    cap = cv2.VideoCapture(self.url)
+                    # Optimize for zero-latency by minimizing buffer size
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-                if frame is not None and frame.size > 0:
-                    self._process_frame(frame)
-                else:
-                    print(f"[Worker {self.camera_id}] Failed to decode fetched JPEG frame.")
+                # Grab frame from the buffer as fast as possible to avoid lag
+                ret = cap.grab()
+                if not ret:
+                    cap.release()
+                    cap = None
+                    self._stop.wait(2)
+                    continue
+
+                now = time.time()
+                # Only decode and process a frame if enough time has passed
+                if now - last_process_time >= FRAME_INTERVAL:
+                    ret, frame = cap.retrieve()
+                    if ret and frame is not None:
+                        self._process_frame(frame)
+                        last_process_time = now
 
             except Exception as e:
-                print(f"[Worker {self.camera_id}] HTTP fetch error: {e}")
+                print(f"[Worker {self.camera_id}] Fetch error: {e}")
+                if cap:
+                    cap.release()
+                    cap = None
                 self._stop.wait(3)
                 continue
-
-            self._stop.wait(FRAME_INTERVAL)
 
     def _process_frame(self, frame):
         """Run InsightFace on one HD frame and update LATEST_DETECTIONS."""
@@ -477,12 +461,12 @@ class CameraWorker:
             target_h = int(h * scale)
             proc_frame = cv2.resize(frame, (target_w, target_h))
 
-            # YOLO Body Detection
+            # YOLO Body/Fire/Smoke Detection
             bodies = []
             if 'yolo_app' in globals() and yolo_app is not None:
                 try:
-                    # class 0 is 'person'
-                    results = yolo_app(proc_frame, classes=[0], verbose=False)
+                    # Detect all classes (fire and smoke)
+                    results = yolo_app(proc_frame, verbose=False)
                     for r in results:
                         for box in r.boxes:
                             x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -693,10 +677,10 @@ def add_camera():
         print(f"Error inserting camera to DB: {e}")
         return jsonify({"error": "Database error"}), 500
     
-    # Detect codec, write to go2rtc.yaml, then restart go2rtc to pick it up
-    src = build_go2rtc_src(rtsp_url)
-    write_go2rtc_yaml_entry(new_id, src)
-    restart_go2rtc()  # go2rtc reads YAML only at startup — must restart
+    # Write to mediamtx.yml, then restart mediamtx to pick it up
+    src = build_mediamtx_src(rtsp_url)
+    write_mediamtx_yaml_entry(new_id, src)
+    restart_mediamtx()
 
     # Start a background worker for this new camera immediately
     with WORKERS_LOCK:
@@ -718,9 +702,9 @@ def delete_camera(camera_id):
         print(f"Error deleting camera from DB: {e}")
         return jsonify({"error": "Database error"}), 500
     
-    # Remove from go2rtc.yaml and restart
-    remove_go2rtc_yaml_entry(camera_id)
-    restart_go2rtc()
+    # Remove from mediamtx.yml and restart
+    remove_mediamtx_yaml_entry(camera_id)
+    restart_mediamtx()
 
     # Stop the background worker for this camera
     stop_camera_worker(camera_id)
@@ -883,12 +867,12 @@ def match_face():
         if img is None:
             return jsonify({"error": "Invalid image data"}), 400
 
-        # YOLO Body Detection
+        # YOLO Body/Fire/Smoke Detection
         bodies = []
         if 'yolo_app' in globals() and yolo_app is not None:
             try:
-                # class 0 is 'person'
-                results = yolo_app(img, classes=[0], verbose=False)
+                # Detect all classes
+                results = yolo_app(img, verbose=False)
                 for r in results:
                     for box in r.boxes:
                         x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -1025,7 +1009,7 @@ def process_ws_frame(camera_id, image_b64):
     bodies = []
     if 'yolo_app' in globals() and yolo_app is not None:
         try:
-            results = yolo_app(img, classes=[0], verbose=False)
+            results = yolo_app(img, verbose=False)
             for r in results:
                 for box in r.boxes:
                     x1, y1, x2, y2 = box.xyxy[0].tolist()
