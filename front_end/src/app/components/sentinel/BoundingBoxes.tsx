@@ -96,7 +96,7 @@ export default function BoundingBoxes({ detections, bodies = [], videoWidth, vid
         const glowId = det.matched ? "url(#glow-green)" : "url(#glow-red)";
         const label = det.matched
           ? `${det.name}  ${Math.round(det.confidence * 100)}%`
-          : `Unknown  ${Math.round(det.confidence * 100)}%`;
+          : `Unknown`;
 
         return (
           <g key={i}>

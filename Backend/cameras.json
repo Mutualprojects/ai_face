@@ -3,7 +3,7 @@
         "id": "camera1",
         "name": "Default Camera",
         "place": "Unknown",
-        "rtsp_url": "rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=1"
+        "rtsp_url": "rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=0"
     },
     {
         "id": "camera_0fb8aa61",

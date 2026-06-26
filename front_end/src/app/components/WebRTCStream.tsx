@@ -7,11 +7,17 @@ import BoundingBoxes from "./sentinel/BoundingBoxes";
 import RegisterPanel from "./sentinel/RegisterPanel";
 import GalleryPanel from "./sentinel/GalleryPanel";
 import LogPanel from "./sentinel/LogPanel";
+import ComparisonPanel from "./sentinel/ComparisonPanel";
 
-const BACKEND = typeof window !== "undefined"
-  ? `http://${window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname}:5000`
-  : "http://127.0.0.1:5000";
+
 const WEBRTC_TIMEOUT = 20000;
+
+// Safely compute backend URL (only runs on client, avoids SSR hydration mismatch)
+function getBackendUrl() {
+  if (typeof window === "undefined") return "http://127.0.0.1:5000";
+  const host = window.location.hostname;
+  return `http://${host === "localhost" ? "127.0.0.1" : host}:5000`;
+}
 
 interface Props { streamName?: string; serverPort?: string; }
 
@@ -48,6 +54,9 @@ function Chip({ dot, label }: { dot: string; label: string }) {
 }
 
 export default function WebRTCStream({ streamName = "camera1", serverPort = "8889" }: Props) {
+  // Computed on client only to avoid SSR/client hydration mismatch
+  const [backendUrl, setBackendUrl] = useState("http://127.0.0.1:5000");
+  useEffect(() => { setBackendUrl(getBackendUrl()); }, []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef    = useRef<RTCPeerConnection | null>(null);
   const wsRef    = useRef<WebSocket | null>(null);
@@ -71,13 +80,16 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   const [vidH, setVidH] = useState(0);
 
   // Face matching
-  const [matchOn, setMatchOn]       = useState(false);
+  const [matchOn, setMatchOn]       = useState(true);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [bodies, setBodies] = useState<[number, number, number, number, number][]>([]);
   const [history, setHistory] = useState<DetectionHistoryItem[]>([]);
 
   // Sidebar tab
   const [tab, setTab] = useState<"register" | "gallery" | "log">("register");
+  // Pre-filled capture for registration from ComparisonPanel
+  const [pendingRegisterCrop, setPendingRegisterCrop] = useState<string | null>(null);
+
 
   // DB data
   const [faces, setFaces]   = useState<RegisteredFace[]>([]);
@@ -86,6 +98,9 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   // Stats
   const [totalScans, setTotalScans]     = useState(0);
   const [matchedToday, setMatchedToday] = useState(0);
+  
+  // Presence analytics (confirmed 3-frame rule)
+  const [presence, setPresence] = useState<{name:string; confidence:number; seconds_ago:number; photo_url:string|null; crop:string|null}[]>([]);
 
   const setM  = (m: StreamMode) => { setMode(m); modeRef.current = m; };
   const setPS = (s: PlayState)  => { setPs(s);   psRef.current   = s; };
@@ -127,15 +142,29 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
     requestAnimationFrame(tick);
   };
 
-  // ── HLS ──────────────────────────────────────────────────────
+  // ── HLS ────────────────────────────────────────────
   const startHLS = useCallback(() => {
     cleanup(); setPS("connecting"); setErrMsg("");
     const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    const hlsPort = "8888"; // MediaMTX default HLS port
+    const hlsPort = "8888";
     const url  = `http://${host}:${hlsPort}/${streamName}/index.m3u8`;
     const v    = videoRef.current; if (!v) return;
     if (Hls.isSupported()) {
-      const hls = new Hls({ lowLatencyMode:true, maxBufferLength:4, backBufferLength:0, liveSyncDurationCount:1 });
+      const hls = new Hls({
+        lowLatencyMode: true,
+        // Buffer: keep only 1s ahead — prevents 4s lag buildup
+        maxBufferLength: 1,
+        maxMaxBufferLength: 2,
+        backBufferLength: 0,
+        // LL-HLS sync: target 1s behind live edge
+        liveSyncDurationCount: 1,
+        liveMaxLatencyDurationCount: 3,
+        // Catch-up: if we fall behind, play at 2x to resync
+        maxLiveSyncPlaybackRate: 2,
+        // Fragment loading
+        fragLoadingMaxRetry: 6,
+        manifestLoadingMaxRetry: 6,
+      });
       hlsRef.current = hls;
       hls.loadSource(url); hls.attachMedia(v);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -149,17 +178,16 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanup, streamName]);
 
-  // ── WebRTC ───────────────────────────────────────────────────
+  // ── WebRTC ────────────────────────────────────────────
   const startWebRTC = useCallback(() => {
     cleanup(); setPS("connecting"); setErrMsg("");
-    const session = sessionRef.current;          // capture current session
-    const alive   = () => session === sessionRef.current; // true if still valid
+    const session = sessionRef.current;
+    const alive   = () => session === sessionRef.current;
 
-    const host  = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    const webrtcUrl = `http://${host}:${serverPort}/${streamName}/whep`;
-    const fallback = (msg: string) => {
-      if (!alive()) return;                       // stale — ignore
-      console.warn(msg); cleanup(); setM("hls"); startHLS();
+    const webrtcUrl  = `/api/whep/${streamName}/whep`;
+    const fallback   = (msg: string) => {
+      if (!alive()) return;
+      console.warn("WebRTC fallback:", msg); cleanup(); setM("hls"); startHLS();
     };
 
     timerRef.current = setTimeout(() => {
@@ -167,23 +195,45 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
     }, WEBRTC_TIMEOUT);
 
     try {
-      const pc = new RTCPeerConnection({ iceServers:[{ urls:"stun:stun.l.google.com:19302" }] });
+      // On LAN: skip public STUN — use host candidates only for sub-100ms ICE
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },  // fallback for non-LAN
+        ],
+        iceTransportPolicy: "all",
+        // Prefer host candidates (LAN) before reflexive (internet STUN)
+        iceCandidatePoolSize: 4,
+      });
       pcRef.current = pc;
-      pc.addTransceiver("video", { direction:"recvonly" });
+
+      // Add bandwidth constraint: 2Mbps max — prevents jitter buffer bloat
+      const trx = pc.addTransceiver("video", { direction: "recvonly" });
+      trx.setCodecPreferences(
+        RTCRtpReceiver.getCapabilities("video")?.codecs
+          // Prefer H.264 baseline for lowest decode latency
+          .sort((a, b) =>
+            (a.mimeType.toLowerCase().includes("h264") ? -1 : 0) -
+            (b.mimeType.toLowerCase().includes("h264") ? -1 : 0)
+          ) ?? []
+      );
 
       pc.ontrack = ev => {
         if (!alive()) return;
         const vid = videoRef.current;
         if (vid && ev.streams[0]) {
-          vid.srcObject = ev.streams[0]; setPS("playing"); startFps();
-          vid.play().catch(()=>{ vid.muted=true; vid.play().catch(()=>{}); });
+          vid.srcObject = ev.streams[0];
+          setPS("playing"); startFps();
+          vid.play().catch(() => { vid.muted = true; vid.play().catch(() => {}); });
         }
       };
+
       pc.onconnectionstatechange = () => {
         if (!alive()) return;
         if (pc.connectionState === "connected") { setPS("playing"); startFps(); }
-        else if (["failed","disconnected"].includes(pc.connectionState)) {
-          retryRef.current = setTimeout(() => { if (alive() && modeRef.current === "webrtc") startWebRTC(); }, 2500);
+        else if (["failed", "disconnected"].includes(pc.connectionState)) {
+          retryRef.current = setTimeout(() => {
+            if (alive() && modeRef.current === "webrtc") startWebRTC();
+          }, 2500);
         }
       };
 
@@ -192,9 +242,9 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
         .then(() => {
           if (!alive()) return;
           return fetch(webrtcUrl, {
-            method: 'POST',
+            method: "POST",
             body: pc.localDescription?.sdp,
-            headers: { 'Content-Type': 'application/sdp' }
+            headers: { "Content-Type": "application/sdp" },
           });
         })
         .then(res => {
@@ -213,20 +263,24 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   }, [cleanup, startHLS, serverPort, streamName]);
 
   // ── status checks ────────────────────────────────────────────
-  const checkStatus = async () => {
+  const checkStatus = useCallback(async () => {
+    // Check Flask backend health
     try {
-      const r = await fetch(`${BACKEND}/api/health`, { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(`${backendUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
       const d = await r.json();
       setDbOk(d.database_connected); setModelOk(d.model_loaded);
     } catch { setDbOk(false); }
+    // Check MediaMTX via WHEP OPTIONS — any HTTP response (not a network error) means it's alive
     try {
-      const host = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
-      const apiHost = host === "localhost" ? "127.0.0.1" : host;
-      // MediaMTX has an API on port 9997 by default, but we can just check if WebRTC responds to ping
-      const r = await fetch(`http://${apiHost}:${serverPort}/`, { method: "OPTIONS", signal: AbortSignal.timeout(3000) });
-      setRtcOk(true); // MediaMTX is responsive
+      const r = await fetch(`/api/whep/${streamName}/whep`, {
+        method: "OPTIONS",
+        signal: AbortSignal.timeout(3000)
+      });
+      // status >= 100 means we got a real HTTP response from MediaMTX
+      setRtcOk(r.status >= 100 && r.status < 600);
     } catch { setRtcOk(false); }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendUrl, serverPort, streamName]);
 
   // ── init ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -254,13 +308,29 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   };
   useEffect(() => { loadFaces(); loadLogs(); }, [loadFaces, loadLogs]);
 
+  // ── Presence Analytics Poll (ALL cameras) ────────────────────────────
+  useEffect(() => {
+    if (!matchOn || ps !== "playing") { setPresence([]); return; }
+    const iv = setInterval(async () => {
+      try {
+        // /api/presence/all aggregates confirmed presence from ALL camera workers
+        const r = await fetch(`${backendUrl}/api/presence/all`);
+        if (r.ok) { const d = await r.json(); setPresence(d.present || []); }
+      } catch {}
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [matchOn, ps, streamName, backendUrl]);
+
   // ── capture (kept for face registration AND live WebSocket stream) ────────────
   const captureFrame = useCallback(() => {
     const v = videoRef.current;
     if (!v || v.readyState < 2) return null;
     const naturalW = v.videoWidth || 640;
     const naturalH = v.videoHeight || 480;
-    const MAX_WIDTH = 640;
+    
+    // OPTIMIZED for ZERO LATENCY: 640px width is the perfect balance 
+    // between seeing small faces and transmitting instantly over WebSocket.
+    const MAX_WIDTH = 640; 
     let targetW = naturalW;
     let targetH = naturalH;
     if (naturalW > MAX_WIDTH) {
@@ -271,7 +341,30 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
     const c = document.createElement("canvas");
     c.width = targetW; c.height = targetH;
     c.getContext("2d")?.drawImage(v, 0, 0, targetW, targetH);
-    return c.toDataURL("image/jpeg", 0.7); // Balanced quality for speed
+    return c.toDataURL("image/jpeg", 0.85); // 85% quality eliminates lag while preserving detail
+  }, []);
+
+  // ── High Resolution capture for enrollment / database storage ──────────────────
+  const captureHighResFrame = useCallback(() => {
+    const v = videoRef.current;
+    if (!v || v.readyState < 2) return null;
+    const naturalW = v.videoWidth || 1920;
+    const naturalH = v.videoHeight || 1080;
+    
+    // Enroll at high resolution (up to 1080p width)
+    const MAX_WIDTH = 1920;
+    let targetW = naturalW;
+    let targetH = naturalH;
+    if (naturalW > MAX_WIDTH) {
+      const scale = MAX_WIDTH / naturalW;
+      targetW = MAX_WIDTH;
+      targetH = Math.round(naturalH * scale);
+    }
+    const c = document.createElement("canvas");
+    c.width = targetW; c.height = targetH;
+    c.getContext("2d")?.drawImage(v, 0, 0, targetW, targetH);
+    // 95% JPEG quality to capture fine details
+    return c.toDataURL("image/jpeg", 0.95);
   }, []);
 
   // ── WebSocket Detection Stream ───────────────────────────────────────────────
@@ -297,7 +390,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
               ws.send(JSON.stringify({ camera_id: streamName, image }));
             }
           }
-        }, 100); // Check frequently, but only send if backend is ready
+        }, 120); // 120ms polling interval avoids flooding the network
       };
       
       ws.onmessage = (event) => {
@@ -326,7 +419,6 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
                   if (isMatch) {
                     const existingIdx = updated.findIndex(h => h.matched && h.name === matchName);
                     if (existingIdx !== -1) {
-                      // Update existing match with better/newer crop
                       updated[existingIdx] = {
                         ...det,
                         timestamp: now,
@@ -340,7 +432,6 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
                       });
                     }
                   } else {
-                    // For unknown, check if we added an unknown in the last 3 seconds to avoid duplication
                     const recentUnknown = updated.find(h => !h.matched && (now - h.timestamp < 3000));
                     if (!recentUnknown) {
                       updated.unshift({
@@ -351,7 +442,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
                     }
                   }
                 });
-                return updated.slice(0, 6); // Keep last 6 detections
+                return updated.slice(0, 6);
               });
             }
 
@@ -398,7 +489,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
       <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
         <Stat label="Enrolled Faces" value={faces.length} color="#a78bfa" />
         <Stat label="Frame Scans"    value={totalScans}   color="#22d3ee" />
-        <Stat label="Matches Today"  value={matchedToday} color="var(--green)" />
+        <Stat label="Present Now"    value={presence.length} color="var(--green)" />
         <Stat label="Unknown Alerts" value={detections.filter(d=>!d.matched).length} color="var(--red)" />
       </div>
 
@@ -410,8 +501,14 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
 
           {/* Control bar */}
           <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            {/* Face Matcher toggle */}
-            <button onClick={() => setMatchOn(v => !v)} style={{
+            {/* Face Matcher toggle — starts/stops background workers on ALL cameras */}
+            <button onClick={async () => {
+              const next = !matchOn;
+              setMatchOn(next);
+              try {
+                await fetch(`${backendUrl}/api/workers/${next ? "start" : "stop"}`, { method: "POST" });
+              } catch {}
+            }} style={{
               display:"flex", alignItems:"center", gap:7, padding:"8px 16px",
               borderRadius:20, border:`1px solid ${matchOn ? "rgba(0,255,136,0.4)" : "rgba(255,255,255,0.1)"}`,
               background: matchOn ? "rgba(0,255,136,0.12)" : "rgba(255,255,255,0.04)",
@@ -494,72 +591,79 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
               </div>
             )}
 
-            {/* Detection banner (bottom) - Side-by-Side Live Crop vs Bucket comparison */}
-            {playing && matchOn && history.length > 0 && (
+            {/* ── PRESENCE PANEL (replaces history banner) ── */}
+            {playing && matchOn && (
               <div style={{ position:"absolute", bottom:14, left:14, right:14,
-                background:"rgba(6,10,23,0.88)", backdropFilter:"blur(20px)",
-                border:"1px solid rgba(255,255,255,0.12)", borderRadius:14,
-                padding:"10px 14px", display:"flex", alignItems:"center", gap:10,
-                overflowX:"auto", zIndex:20, boxShadow:"0 12px 40px rgba(0,0,0,0.7)" }}>
+                background:"rgba(6,10,23,0.92)", backdropFilter:"blur(24px)",
+                border:"1px solid rgba(255,255,255,0.10)", borderRadius:14,
+                padding:"10px 14px", zIndex:20, boxShadow:"0 12px 40px rgba(0,0,0,0.7)" }}>
                 
-                <div style={{ display:"flex", flexDirection:"column", marginRight:10, flexShrink:0, borderRight:"1px solid rgba(255,255,255,0.1)", paddingRight:12 }}>
-                  <span style={{ fontSize:9, fontWeight:900, color:"#a78bfa", letterSpacing:"0.06em", textTransform:"uppercase" }}>Live Matches</span>
-                  <span style={{ fontSize:7, color:"rgba(255,255,255,0.35)", marginTop:2 }}>Comparison Feed</span>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                  <span style={{ width:6, height:6, borderRadius:"50%", background:presence.length>0?"var(--green)":"rgba(255,255,255,0.2)",
+                    boxShadow:presence.length>0?"0 0 8px var(--green)":"none" }} />
+                  <span style={{ fontSize:9, fontWeight:900, color:"#a78bfa", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                    Presence — {presence.length > 0 ? `${presence.length} Confirmed` : "Scanning…"}
+                  </span>
+                  {detections.filter(d=>!d.matched).length > 0 && (
+                    <span style={{ marginLeft:"auto", fontSize:8, fontWeight:700,
+                      color:"var(--red)", background:"rgba(255,59,92,0.12)",
+                      border:"1px solid rgba(255,59,92,0.3)", borderRadius:10, padding:"2px 8px" }}>
+                      {detections.filter(d=>!d.matched).length} Unknown
+                    </span>
+                  )}
                 </div>
 
-                <div style={{ display:"flex", gap:10, overflowX:"auto" }}>
-                  {history.map((d) => (
-                    <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8,
-                      background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)",
-                      borderRadius:10, padding:"6px 10px", flexShrink:0, transition:"all 0.2s" }}>
-                      
-                      {/* Live Crop (chunk from stream) */}
-                      {d.crop_b64 && (
-                        <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={d.crop_b64} alt="Live crop" style={{ width:36, height:36, borderRadius:6, objectFit:"cover",
-                            border:`1.5px solid ${d.matched ? "var(--green)" : "var(--red)"}` }} />
-                          <span style={{ fontSize:6, fontWeight:600, color:"rgba(255,255,255,0.35)", marginTop:3, letterSpacing:"0.02em" }}>LIVE CROP</span>
-                        </div>
-                      )}
-                      
-                      {/* Match Indicator & Confidence */}
-                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"0 2px" }}>
-                        <span style={{ fontSize:10, fontWeight:800, color: d.matched ? "var(--green)" : "var(--red)", letterSpacing:"-0.01em" }}>
-                          {d.matched ? `${Math.round(d.confidence * 100)}%` : "NEW"}
-                        </span>
-                        <span style={{ fontSize:7, fontWeight:600, color:"rgba(255,255,255,0.3)", marginTop:2 }}>
-                          {d.matched ? "MATCH" : "UNKNOWN"}
-                        </span>
-                      </div>
-
-                      {/* Enrolled Image (stored in bucket) */}
-                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
-                        {d.matched && d.photo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={d.photo_url} alt="Bucket" style={{ width:36, height:36, borderRadius:6, objectFit:"cover",
-                            border:"1.5px solid var(--violet)" }} />
-                        ) : (
-                          <div style={{ width:36, height:36, borderRadius:6, background:"rgba(255,255,255,0.04)",
-                            display:"flex", alignItems:"center", justifyContent:"center", border:"1.5px dashed rgba(255,255,255,0.15)" }}>
-                            <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>?</span>
+                {presence.length === 0 ? (
+                  <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", fontStyle:"italic", textAlign:"center", padding:"4px 0" }}>
+                    No registered faces confirmed yet. Needs 3+ frames to confirm presence.
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", gap:10, overflowX:"auto" }}>
+                    {presence.map((p, i) => (
+                      <div key={i} style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0,
+                        background:"rgba(0,255,136,0.05)", border:"1px solid rgba(0,255,136,0.2)",
+                        borderRadius:10, padding:"6px 10px", transition:"all 0.3s" }}>
+                        
+                        {/* Live crop */}
+                        {p.crop && (
+                          <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={p.crop} alt="live" style={{ width:38, height:38, borderRadius:6, objectFit:"cover",
+                              border:"2px solid var(--green)", boxShadow:"0 0 8px rgba(0,255,136,0.4)" }} />
+                            <span style={{ fontSize:6, color:"rgba(255,255,255,0.4)", marginTop:2 }}>LIVE</span>
                           </div>
                         )}
-                        <span style={{ fontSize:6, fontWeight:600, color:"rgba(255,255,255,0.35)", marginTop:3, letterSpacing:"0.02em" }}>BUCKET</span>
-                      </div>
 
-                      {/* Info */}
-                      <div style={{ marginLeft:4, borderLeft:"1px solid rgba(255,255,255,0.05)", paddingLeft:8 }}>
-                        <div style={{ fontSize:11, fontWeight:800, color: d.matched ? "var(--green)" : "var(--red)" }}>
-                          {d.matched ? d.name : "Unknown Subject"}
-                        </div>
-                        <div style={{ fontSize:8, color:"rgba(255,255,255,0.4)", fontFamily:"monospace", marginTop:2 }}>
-                          {new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        {/* Arrow */}
+                        <span style={{ fontSize:12, color:"rgba(0,255,136,0.6)" }}>→</span>
+
+                        {/* Registered photo */}
+                        {p.photo_url && (
+                          <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={p.photo_url} alt="reg" style={{ width:38, height:38, borderRadius:6, objectFit:"cover",
+                              border:"2px solid #a78bfa", boxShadow:"0 0 8px rgba(167,139,250,0.3)" }} />
+                            <span style={{ fontSize:6, color:"rgba(255,255,255,0.4)", marginTop:2 }}>BUCKET</span>
+                          </div>
+                        )}
+
+                        {/* Info */}
+                        <div style={{ borderLeft:"1px solid rgba(255,255,255,0.08)", paddingLeft:8 }}>
+                          <div style={{ fontSize:12, fontWeight:800, color:"var(--green)" }}>✓ {p.name}</div>
+                          <div style={{ fontSize:9, color:"rgba(255,255,255,0.4)", fontFamily:"monospace", marginTop:2 }}>
+                            {Math.round(p.confidence*100)}% · {p.seconds_ago}s ago
+                          </div>
+                          {/* Confidence bar */}
+                          <div style={{ width:60, height:3, background:"rgba(255,255,255,0.08)", borderRadius:2, marginTop:4 }}>
+                            <div style={{ width:`${Math.round(p.confidence*100)}%`, height:"100%",
+                              background:"linear-gradient(90deg,#00ff88,#00d4aa)", borderRadius:2,
+                              transition:"width 0.5s ease" }} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -617,7 +721,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
             background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)",
             borderRadius:8, padding:"8px 14px" }}>
             <span style={{ color:"rgba(255,255,255,0.3)" }}>SOURCE </span>
-            rtsp://admin:***@172.21.2.17:554/rtsp/streaming · mediamtx:{serverPort} · {mode.toUpperCase()}
+            Stream ID: {streamName} · mediamtx:{serverPort} · {mode.toUpperCase()}
           </div>
         </div>
 
@@ -643,12 +747,26 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
           </div>
 
           {/* Tab content */}
-          <div style={{ padding:16, flex:1, overflowY:"auto" }}>
+          <div style={{ padding:16, flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:16 }}>
+            {/* Comparison panel — only shown when unknowns detected */}
+            {detections.filter(d => !d.matched).length > 0 && tab === "register" && (
+              <ComparisonPanel
+                unknowns={detections.filter(d => !d.matched)}
+                backendUrl={backendUrl}
+                onRegisterClick={(crop) => {
+                  setPendingRegisterCrop(crop);
+                  setTab("register");
+                }}
+              />
+            )}
             {tab === "register" && (
               <RegisterPanel
                 canCapture={playing}
-                captureFrame={captureFrame}
-                onSuccess={() => { loadFaces(); setTab("gallery"); }}
+                captureFrame={pendingRegisterCrop
+                  ? () => { const c = pendingRegisterCrop; setPendingRegisterCrop(null); return c; }
+                  : captureHighResFrame
+                }
+                onSuccess={() => { loadFaces(); setTab("gallery"); setPendingRegisterCrop(null); }}
               />
             )}
             {tab === "gallery" && (

@@ -2,11 +2,11 @@
 
 echo "Starting Facial Recognition System..."
 
-# Start go2rtc
-echo "Starting go2rtc..."
+# Start MediaMTX
+echo "Starting MediaMTX..."
 cd "/home/btl/facial_recognistion/Backend"
-./go2rtc -config go2rtc.yaml &
-GO2RTC_PID=$!
+./mediamtx mediamtx.yml &
+MEDIAMTX_PID=$!
 
 # Start Flask Backend
 echo "Starting Flask Backend..."

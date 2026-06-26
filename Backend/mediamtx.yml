@@ -1,4 +1,4 @@
-api: false
+api: true
 apiAddress: :9997
 apiAllowOrigin: '*'
 apiEncryption: false
@@ -41,9 +41,9 @@ hlsAlwaysRemux: false
 hlsDirectory: ''
 hlsEncryption: false
 hlsMuxerCloseAfter: 60s
-hlsPartDuration: 200ms
-hlsSegmentCount: 7
-hlsSegmentDuration: 1s
+hlsPartDuration: 100ms
+hlsSegmentCount: 3
+hlsSegmentDuration: 500ms
 hlsSegmentMaxSize: 50M
 hlsServerCert: server.crt
 hlsServerKey: server.key
@@ -140,28 +140,46 @@ pathDefaults:
 paths:
   all_others: null
   camera1:
-    runOnInit: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
-      low_delay -rtsp_transport tcp -i "rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=1"
-      -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
-    runOnInitRestart: true
+    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
+      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
     source: publisher
   camera_6ff83820:
-    runOnInit: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
-      low_delay -rtsp_transport tcp -i "rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c3/s0"
-      -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
-    runOnInitRestart: true
+    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
+      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c3/s0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
     source: publisher
+  camera_79da03da:
+    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
+      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c5/s0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  camera_bff4dca0:
+    source: rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c8/s0
   camera_c2765cf7:
-    runOnInit: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
-      low_delay -rtsp_transport tcp -i "rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c1/s0"
-      -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
-    runOnInitRestart: true
+    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
+      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c1/s0'
+      -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g
+      30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
     source: publisher
   camera_ebaa7b82:
-    runOnInit: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
-      low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c3/s0'
-      -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
-    runOnInitRestart: true
+    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
+      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c3/s0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
     source: publisher
 playback: false
 playbackAddress: :9996
@@ -204,19 +222,21 @@ srt: true
 srtAddress: :8890
 udpMaxPayloadSize: 1472
 webrtc: true
-webrtcAdditionalHosts: []
+webrtcAdditionalHosts:
+- 172.21.6.167
+- 127.0.0.1
 webrtcAddress: :8889
 webrtcAllowOrigin: '*'
 webrtcEncryption: false
 webrtcHandshakeTimeout: 10s
 webrtcICEServers2: []
-webrtcIPsFromInterfaces: true
+webrtcIPsFromInterfaces: false
 webrtcIPsFromInterfacesList: []
 webrtcLocalTCPAddress: ''
 webrtcLocalUDPAddress: :8189
 webrtcServerCert: server.crt
 webrtcServerKey: server.key
-webrtcTrackGatherTimeout: 2s
+webrtcTrackGatherTimeout: 1s
 webrtcTrustedProxies: []
-writeQueueSize: 512
+writeQueueSize: 4096
 writeTimeout: 10s

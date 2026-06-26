@@ -96,7 +96,7 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
               Capture from live feed or upload a clear portrait photo
             </p>
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={capture} disabled={!canCapture} style={{...s.btnSec,
+              <button onClick={capture} disabled={!canCapture} suppressHydrationWarning style={{...s.btnSec,
                 color: canCapture ? "var(--green)" : "var(--text-muted)",
                 borderColor: canCapture ? "rgba(0,255,136,0.3)" : "rgba(255,255,255,0.08)" }}>
                 📷 Capture

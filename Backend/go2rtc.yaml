@@ -1,10 +1,23 @@
 api:
-  origin: "*"
-
+  origin: '*'
 streams:
   camera1:
-    - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags low_delay -rtsp_transport tcp -i "rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=1" -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
+  - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
+    low_delay -rtsp_transport tcp -i "rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=0"
+    -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
   camera_6ff83820:
-    - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi$123@172.23.0.100:554/unicast/c3/s0' -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
+  - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
+    low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi$123@172.23.0.100:554/unicast/c3/s0'
+    -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
+  camera_bff4dca0:
+  - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
+    low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi$123@172.23.0.100:554/unicast/c8/s0'
+    -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
   camera_c2765cf7:
-    - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi$123@172.23.0.100:554/unicast/c1/s0' -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
+  - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
+    low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi$123@172.23.0.100:554/unicast/c1/s0'
+    -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}
+  camera_ebaa7b82:
+  - exec:ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags
+    low_delay -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi$123@172.23.0.100:554/unicast/c9/s0'
+    -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp {output}

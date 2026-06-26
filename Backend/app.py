@@ -62,7 +62,7 @@ face_app = None
 for model_name in ["buffalo_l", "buffalo_sc"]:
     try:
         candidate = FaceAnalysis(name=model_name, providers=["CPUExecutionProvider"])
-        candidate.prepare(ctx_id=-1, det_size=(640, 640))
+        candidate.prepare(ctx_id=-1, det_size=(1280, 1280))
         face_app = candidate
         print(f"InsightFace '{model_name}' model loaded successfully.")
         break
@@ -72,14 +72,14 @@ for model_name in ["buffalo_l", "buffalo_sc"]:
 if face_app is None:
     print("ERROR: No InsightFace model could be loaded.")
 
-# ── Load YOLOv8 Model (For Body Detection) ──────────────────
-print("Loading Fire & Smoke model...")
+# ── Load YOLOv8 Model (For Person Detection) ──────────────────
+print("Loading YOLOv8n model...")
 try:
     from ultralytics import YOLO
-    yolo_app = YOLO("/home/btl/fire_&_smoke/best.pt")
-    print("Fire & Smoke model loaded successfully.")
+    yolo_app = YOLO("/home/btl/facial_recognistion/Backend/yolov8n.pt")
+    print("YOLOv8n model loaded successfully.")
 except Exception as e:
-    print(f"ERROR: Could not load Fire & Smoke model: {e}")
+    print(f"ERROR: Could not load YOLOv8n model: {e}")
     yolo_app = None
 
 
@@ -100,12 +100,42 @@ def base64_to_cv2(b64_str):
 
 def cv2_to_base64(img):
     try:
-        _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 95])
         b64_bytes = base64.b64encode(buffer)
         return "data:image/jpeg;base64," + b64_bytes.decode('utf-8')
     except Exception as e:
         print(f"Error encoding image to base64: {e}")
         return None
+
+def enhance_face_for_embedding(face_img):
+    """
+    HD-quality face preprocessing pipeline before embedding extraction.
+    Steps: Upscale (if small) → CLAHE contrast → Bilateral denoise
+    This bridges the quality gap between a live CCTV crop and a stored registration photo.
+    """
+    if face_img is None or face_img.size == 0:
+        return face_img
+    try:
+        h, w = face_img.shape[:2]
+        # Step 1: Upscale tiny faces to InsightFace native 112x112 minimum using cubic interpolation
+        if h < 112 or w < 112:
+            scale = max(112.0 / h, 112.0 / w)
+            face_img = cv2.resize(face_img, (max(w, int(w * scale)), max(h, int(h * scale))),
+                                  interpolation=cv2.INTER_CUBIC)
+        # Step 2: CLAHE — adaptive contrast enhancement on the L channel only
+        lab = cv2.cvtColor(face_img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        face_img = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+        # Step 3: Edge-preserving bilateral filter (removes CCTV noise, keeps facial details)
+        face_img = cv2.bilateralFilter(face_img, 5, 35, 35)
+        # Step 4: Smooth Unsharp Masking to enhance details without harsh noise artifacts
+        gaussian = cv2.GaussianBlur(face_img, (0, 0), 2.0)
+        face_img = cv2.addWeighted(face_img, 1.5, gaussian, -0.5, 0)
+    except Exception:
+        pass  # Fallback to original if any step fails
+    return face_img
 
 def cosine_similarity(a, b):
     dot = np.dot(a, b)
@@ -179,37 +209,56 @@ MEDIAMTX_YAML = os.path.join(os.path.dirname(__file__), "mediamtx.yml")
 MEDIAMTX_BIN  = os.path.join(os.path.dirname(__file__), "mediamtx")
 MEDIAMTX_LOG  = os.path.join(os.path.dirname(__file__), "mediamtx_run.log")
 
-def detect_codec(rtsp_url: str) -> str:
-    """Probe the RTSP stream to detect its video codec."""
+def detect_codec_and_width(rtsp_url: str) -> tuple:
+    """Probe the RTSP stream to detect its video codec and width."""
     # Decode any percent-encoded characters (e.g. %24 → $) before probing
     from urllib.parse import unquote
     decoded_url = unquote(rtsp_url)
+    codec = "unknown"
+    width = None
     try:
         result = subprocess.run(
             ["ffprobe", "-v", "quiet", "-rtsp_transport", "tcp",
              "-i", decoded_url, "-select_streams", "v:0",
-             "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1"],
+             "-show_entries", "stream=codec_name,width", "-of", "default=noprint_wrappers=1"],
             capture_output=True, text=True, timeout=12
         )
-        codec = result.stdout.strip().lower()
-        print(f"Detected codec for stream: {codec or 'unknown'}")
-        return codec or "unknown"
+        for line in result.stdout.strip().split("\n"):
+            if "=" in line:
+                key, val = line.split("=", 1)
+                if key.strip() == "codec_name":
+                    codec = val.strip().lower()
+                elif key.strip() == "width":
+                    try:
+                        width = int(val.strip())
+                    except ValueError:
+                        pass
+        print(f"Detected codec: {codec}, width: {width}")
+        return codec, width
     except Exception as e:
         print(f"ffprobe failed: {e}")
-        return "unknown"
+        return "unknown", None
 
 def build_mediamtx_src(rtsp_url: str) -> dict:
     """Build the mediamtx stream configuration dictionary."""
     from urllib.parse import unquote
     decoded_url = unquote(rtsp_url)
-    codec = detect_codec(decoded_url)
+    # Ensure raw '$' in password is URL-encoded as '%24' to avoid shell expansion issues in spawned ffmpeg
+    if "$" in decoded_url:
+        decoded_url = decoded_url.replace("$", "%24")
+    codec, width = detect_codec_and_width(decoded_url)
     if codec in ("hevc", "h265"):
-        print(f"HEVC detected — will use ffmpeg transcode via runOnInit")
-        # MediaMTX will spawn ffmpeg on init, which pulls the stream and publishes it to this path.
+        print(f"HEVC detected — will use high-quality ffmpeg transcode via runOnDemand")
+        vf_scale = ""
+        if width and width > 1280:
+            vf_scale = "-vf scale=1280:-2 "
+            print(f"Adding downscale filter (1280x720) for stream width {width}")
+        # MediaMTX will spawn ffmpeg on demand, which pulls the stream and publishes it to this path.
         return {
             "source": "publisher",
-            "runOnInit": f"ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer -flags low_delay -rtsp_transport tcp -i '{decoded_url}' -c:v libx264 -preset ultrafast -tune zerolatency -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH",
-            "runOnInitRestart": True
+            "runOnDemand": f"ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt -flags low_delay -rtsp_transport tcp -i '{decoded_url}' {vf_scale}-c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH",
+            "runOnDemandRestart": True,
+            "runOnDemandCloseAfter": "10s"
         }
     return {"source": decoded_url}
 
@@ -347,8 +396,50 @@ restart_mediamtx()
 import threading, time
 
 GO2RTC_RTSP_PORT = 8554          # go2rtc internal RTSP restream port
-FRAME_INTERVAL   = 0.15          # seconds between processed frames per camera (6.6 FPS)
-MATCH_THRESHOLD  = 0.38          # ArcFace cosine similarity threshold
+FRAME_INTERVAL   = 1.00          # seconds between processed frames per camera (1 FPS for light background tracking)
+MATCH_THRESHOLD  = 0.35          # ArcFace identity threshold — slightly relaxed for small faces
+
+# ── Temporal Presence Tracker ───────────────────────────────────────────────
+# A face must be detected in PRESENCE_CONFIRM_FRAMES consecutive frames before
+# being declared "Present". This eliminates single-frame false positives.
+PRESENCE_CONFIRM_FRAMES = 3      # frames needed to confirm someone is present
+PRESENCE_TIMEOUT_SEC    = 8.0   # seconds of absence before removing from presence list
+
+# Structure: { camera_id: { name: {frames, scores, last_seen, photo_url, crop, confirmed} } }
+PRESENCE_TRACKER: dict = {}
+PRESENCE_LOCK = threading.Lock()
+
+def presence_update(camera_id: str, name: str, score: float, photo_url, crop_b64):
+    """Update presence tracker. Returns (is_confirmed, avg_confidence)."""
+    now = time.time()
+    with PRESENCE_LOCK:
+        if camera_id not in PRESENCE_TRACKER:
+            PRESENCE_TRACKER[camera_id] = {}
+        tracker = PRESENCE_TRACKER[camera_id]
+        if name not in tracker:
+            tracker[name] = {"frames": 0, "scores": [], "last_seen": 0,
+                             "photo_url": photo_url, "crop": crop_b64, "confirmed": False}
+        entry = tracker[name]
+        entry["frames"] += 1
+        entry["scores"] = (entry["scores"] + [score])[-10:]  # rolling window of last 10
+        entry["last_seen"] = now
+        entry["photo_url"] = photo_url
+        entry["crop"] = crop_b64
+        if entry["frames"] >= PRESENCE_CONFIRM_FRAMES:
+            entry["confirmed"] = True
+        avg = sum(entry["scores"]) / len(entry["scores"])
+    return entry["confirmed"], avg
+
+def presence_cleanup(camera_id: str):
+    """Remove stale entries from presence tracker for a camera."""
+    now = time.time()
+    with PRESENCE_LOCK:
+        if camera_id not in PRESENCE_TRACKER:
+            return
+        stale = [n for n, d in PRESENCE_TRACKER[camera_id].items()
+                 if now - d["last_seen"] > PRESENCE_TIMEOUT_SEC]
+        for n in stale:
+            del PRESENCE_TRACKER[camera_id][n]
 
 # Log rate-limiting/cooldown tracking
 LAST_LOGGED_TIME: dict = {}
@@ -453,25 +544,22 @@ class CameraWorker:
         if face_app is None:
             return
         try:
-            # Resize frame to max width 640 (maintaining aspect ratio)
-            # This matches the frontend video box scale and boosts CPU inference speed.
             h, w = frame.shape[:2]
-            target_w = 640
-            scale = target_w / w
-            target_h = int(h * scale)
-            proc_frame = cv2.resize(frame, (target_w, target_h))
+            target_w = 1280
+            proc_frame = cv2.resize(frame, (target_w, int(h * target_w / w)))
 
-            # YOLO Body/Fire/Smoke Detection
+            # YOLO Body Detection
             bodies = []
             if 'yolo_app' in globals() and yolo_app is not None:
                 try:
-                    # Detect all classes (fire and smoke)
                     results = yolo_app(proc_frame, verbose=False)
                     for r in results:
                         for box in r.boxes:
+                            if int(box.cls[0]) != 0: continue # Only persons
                             x1, y1, x2, y2 = box.xyxy[0].tolist()
                             conf = float(box.conf[0])
-                            bodies.append([x1, y1, x2, y2, conf])
+                            if conf >= 0.40:
+                                bodies.append([x1, y1, x2, y2, conf])
                 except Exception as e:
                     print(f"YOLO inference error: {e}")
 
@@ -480,35 +568,63 @@ class CameraWorker:
                 LATEST_DETECTIONS[self.camera_id] = {
                     "detections": [], "timestamp": time.time()
                 }
+                presence_cleanup(self.camera_id)
                 return
 
             h, w = proc_frame.shape[:2]
             detections = []
+            presence_cleanup(self.camera_id)
 
             for face in faces:
                 det_score = float(getattr(face, "det_score", 1.0))
-                if det_score < 0.5:
+                if det_score < 0.35:
                     continue
 
                 bbox   = face.bbox.astype(int).tolist()
                 x1, y1 = max(0, bbox[0]), max(0, bbox[1])
                 x2, y2 = min(w, bbox[2]), min(h, bbox[3])
+                if (x2 - x1) < 15 or (y2 - y1) < 15:
+                    continue
 
-                face_crop = proc_frame[y1:y2, x1:x2]
-                crop_b64  = cv2_to_base64(face_crop) if face_crop.size > 0 else None
+                raw_crop = proc_frame[y1:y2, x1:x2]
+                if raw_crop.size == 0: continue
+                enhanced_crop = enhance_face_for_embedding(raw_crop.copy())
+                crop_b64 = cv2_to_base64(enhanced_crop if enhanced_crop is not None else raw_crop)
 
+                # ── Quick Initial Match (Pass 1) ────────────────────────────────
+                embedding = face.embedding
                 lm = getattr(face, "landmark_2d_106", None)
+                best_known, best_score = match_embedding(embedding, KNOWN_FACES_CACHE, MATCH_THRESHOLD)
+
+                # ── HD Enhancement (Pass 2 - Only for Unknowns) ─────────────────
+                if not best_known and enhanced_crop is not None:
+                    try:
+                        enh_faces = face_app.get(enhanced_crop)
+                        if enh_faces:
+                            best_enh = max(enh_faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+                            enh_emb = best_enh.embedding
+                            enh_known, enh_score = match_embedding(enh_emb, KNOWN_FACES_CACHE, MATCH_THRESHOLD)
+                            if enh_known:
+                                best_known = enh_known
+                                best_score = enh_score
+                                lm = getattr(best_enh, "landmark_2d_106", None)
+                    except Exception:
+                        pass
+                
                 landmarks = lm.astype(float).tolist() if lm is not None else []
 
-                best_known, best_score = match_embedding(
-                    face.embedding, KNOWN_FACES_CACHE, MATCH_THRESHOLD
-                )
-
                 if best_known:
+                    confirmed, avg_score = presence_update(
+                        self.camera_id, best_known["name"], best_score,
+                        best_known.get("photo_url"), crop_b64
+                    )
+                    if confirmed:
+                        self._log_match(best_known["name"], avg_score, crop_b64)
                     detections.append({
                         "matched":    True,
+                        "confirmed":  confirmed,
                         "name":       best_known["name"],
-                        "confidence": round(best_score, 4),
+                        "confidence": round(avg_score, 4),
                         "photo_url":  best_known.get("photo_url"),
                         "bbox":       bbox,
                         "crop_b64":   crop_b64,
@@ -516,11 +632,10 @@ class CameraWorker:
                         "landmarks":  landmarks,
                         "camera_id":  self.camera_id,
                     })
-                    # Write to Supabase ONLY on a real match — zero wasteful writes
-                    self._log_match(best_known["name"], best_score, crop_b64)
                 else:
                     detections.append({
                         "matched":    False,
+                        "confirmed":  False,
                         "name":       "Unknown",
                         "confidence": round(max(best_score, 0.0), 4),
                         "photo_url":  None,
@@ -534,9 +649,8 @@ class CameraWorker:
             LATEST_DETECTIONS[self.camera_id] = {
                 "detections": detections,
                 "timestamp":  time.time(),
+                "bodies":     bodies,
             }
-
-
 
         except Exception as e:
             print(f"[Worker {self.camera_id}] Frame error: {e}")
@@ -593,10 +707,23 @@ def start_all_workers():
 
 
 def stop_camera_worker(camera_id: str):
+    """Stop a single active CameraWorker thread."""
     with WORKERS_LOCK:
         w = CAMERA_WORKERS.pop(camera_id, None)
     if w:
         w.stop()
+
+
+def stop_all_workers():
+    """Stop all active CameraWorker threads."""
+    with WORKERS_LOCK:
+        ids = list(CAMERA_WORKERS.keys())
+    for cam_id in ids:
+        with WORKERS_LOCK:
+            w = CAMERA_WORKERS.pop(cam_id, None)
+        if w:
+            w.stop()
+    print(f"[Workers] Stopped all {len(ids)} camera worker(s).")
 
 
 # start_all_workers()
@@ -604,6 +731,63 @@ def stop_camera_worker(camera_id: str):
 # ──────────────────────────────────────────────────────────
 # ENDPOINTS
 # ──────────────────────────────────────────────────────────
+
+@app.route("/api/workers/start", methods=["POST"])
+def workers_start():
+    """Start background analysis on ALL cameras. Called when Face Matcher is toggled ON."""
+    start_all_workers()
+    with WORKERS_LOCK:
+        active = list(CAMERA_WORKERS.keys())
+    return jsonify({"success": True, "active_cameras": active, "count": len(active)})
+
+@app.route("/api/workers/stop", methods=["POST"])
+def workers_stop():
+    """Stop background analysis on all cameras. Called when Face Matcher is toggled OFF."""
+    stop_all_workers()
+    return jsonify({"success": True})
+
+@app.route("/api/presence/all", methods=["GET"])
+def get_presence_all():
+    """
+    Aggregate confirmed presence across ALL cameras.
+    A person confirmed on multiple cameras will appear once (most recent detection wins).
+    """
+    now = time.time()
+    with WORKERS_LOCK:
+        all_cam_ids = list(CAMERA_WORKERS.keys())
+
+    # Also include cameras with active WS detections not from background workers
+    from_tracker = set()
+    with PRESENCE_LOCK:
+        all_cam_ids = list(set(all_cam_ids) | set(PRESENCE_TRACKER.keys()))
+
+    for cam_id in all_cam_ids:
+        presence_cleanup(cam_id)
+
+    # Merge — if same person seen on multiple cameras, pick highest confidence
+    merged: dict = {}
+    with PRESENCE_LOCK:
+        for cam_id in PRESENCE_TRACKER:
+            for name, data in PRESENCE_TRACKER[cam_id].items():
+                if not data.get("confirmed") or name == "Unknown":
+                    continue
+                scores = data.get("scores", [1.0])
+                conf = sum(scores) / len(scores)
+                if name not in merged or conf > merged[name]["confidence"]:
+                    merged[name] = {
+                        "name":        name,
+                        "confidence":  round(conf, 4),
+                        "seen_frames": data["frames"],
+                        "last_seen":   data["last_seen"],
+                        "seconds_ago": round(now - data["last_seen"], 1),
+                        "photo_url":   data.get("photo_url"),
+                        "crop":        data.get("crop"),
+                        "camera_id":   cam_id,
+                    }
+
+    present = sorted(merged.values(), key=lambda x: x["last_seen"], reverse=True)
+    return jsonify({"present": present, "count": len(present), "cameras_monitored": len(all_cam_ids)})
+
 
 @app.route("/", methods=["GET"])
 def home():
@@ -740,8 +924,6 @@ def extract_embedding():
         # Select the largest face in the picture
         face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
 
-        embedding = face.embedding.tolist()
-
         # Crop the face chip with padding
         bbox = face.bbox.astype(int)
         h, w, _ = img.shape
@@ -753,7 +935,22 @@ def extract_embedding():
         y2 = min(h, bbox[3] + pad_y)
 
         face_crop = img[y1:y2, x1:x2]
-        face_b64 = cv2_to_base64(face_crop) if face_crop.size > 0 else image_b64
+        
+        # Apply super-resolution enhancement to the crop before extraction and upload
+        if face_crop.size > 0:
+            enhanced_face = enhance_face_for_embedding(face_crop.copy())
+            face_b64 = cv2_to_base64(enhanced_face)
+            
+            # Re-extract embedding from the enhanced face to improve detection accuracy
+            enh_faces = face_app.get(enhanced_face)
+            if enh_faces:
+                primary = max(enh_faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
+                embedding = primary.embedding.tolist()
+            else:
+                embedding = face.embedding.tolist()
+        else:
+            face_b64 = image_b64
+            embedding = face.embedding.tolist()
 
         return jsonify({
             "success": True,
@@ -803,8 +1000,6 @@ def register_face():
         if det_score < 0.7:
             return jsonify({"error": "Face is too blurry or unclear. Please take a clearer photo looking directly at the camera."}), 400
 
-        embedding = face.embedding.tolist()
-
         # Crop face chip
         bbox = face.bbox.astype(int)
         h, w, _ = img.shape
@@ -816,14 +1011,35 @@ def register_face():
         y2 = min(h, bbox[3] + pad_y)
 
         face_crop = img[y1:y2, x1:x2]
-        face_b64 = cv2_to_base64(face_crop) if face_crop.size > 0 else image_b64
+        if face_crop.size > 0:
+            enhanced_face = enhance_face_for_embedding(face_crop.copy())
+            face_b64 = cv2_to_base64(enhanced_face)
+            enh_faces = face_app.get(enhanced_face)
+            if enh_faces:
+                primary = max(enh_faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
+                embedding = primary.embedding.tolist()
+            else:
+                embedding = face.embedding.tolist()
+        else:
+            face_b64 = image_b64
+            embedding = face.embedding.tolist()
 
-        # Insert to Supabase known_faces table
-        res = supabase.table("known_faces").insert({
-            "name": name,
-            "embedding": embedding,
-            "photo_url": face_b64
-        }).execute()
+        # Check if the name already exists in the database
+        existing = supabase.table("known_faces").select("id").eq("name", name).execute()
+        
+        if existing.data and len(existing.data) > 0:
+            # Update existing face (keep the same name, but upgrade the embedding & photo)
+            res = supabase.table("known_faces").update({
+                "embedding": embedding,
+                "photo_url": face_b64
+            }).eq("name", name).execute()
+        else:
+            # Insert to Supabase known_faces table
+            res = supabase.table("known_faces").insert({
+                "name": name,
+                "embedding": embedding,
+                "photo_url": face_b64
+            }).execute()
 
         # Refresh in-memory cache so next frame match picks up the new face immediately
         refresh_cache()
@@ -893,19 +1109,22 @@ def match_face():
         # PERFORMANCE FIX: Use in-memory cache — no DB round-trip!
         known_list = KNOWN_FACES_CACHE
 
-        # ArcFace cosine similarity threshold
-        # Lowered to 0.38 for better live recognition (live feeds have motion blur/lighting drops)
+        # Higher threshold = fewer false positives. 0.38 is the proven sweet spot.
         THRESHOLD = 0.38
 
         detections = []
         for face in faces:
             det_score = float(face.det_score) if hasattr(face, 'det_score') else 1.0
             
-            # Performance & Accuracy Filter: Skip blurry or low-confidence faces
-            if det_score < 0.5:
+            # CCTV-friendly: accept lower confidence for distant/small faces
+            if det_score < 0.40:
                 continue
 
             bbox = face.bbox.astype(int).tolist()
+            # 20x20 minimum — catches faces far from a wide-angle camera
+            if (bbox[2] - bbox[0]) < 20 or (bbox[3] - bbox[1]) < 20:
+                continue
+
             input_emb = face.embedding
 
             # Crop face chip for log snapshot
@@ -963,6 +1182,59 @@ def match_face():
         print(f"Error matching face: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ─── /api/top_matches ────────────────────────────────────────────────────────
+# Returns the top-N closest enrolled faces for a detected face crop.
+# Used by the frontend ComparisonPanel to show "who does this Unknown look like?"
+@app.route("/api/top_matches", methods=["POST"])
+def top_matches():
+    """
+    Given a base64 face crop, return the top N closest known faces with scores.
+    Does NOT apply the match threshold — shows all candidates ranked by similarity.
+    """
+    if not face_app:
+        return jsonify({"error": "Model not loaded"}), 500
+    try:
+        data = request.json or {}
+        image_b64 = data.get("image")
+        top_n = int(data.get("top_n", 5))
+        if not image_b64:
+            return jsonify({"error": "Missing image"}), 400
+        img = base64_to_cv2(image_b64)
+        if img is None:
+            return jsonify({"error": "Invalid image"}), 400
+
+        faces = face_app.get(img)
+        if not faces:
+            return jsonify({"matches": [], "message": "No face detected"}), 200
+
+        # Use the largest / most confident detected face
+        primary = max(faces, key=lambda f: float(getattr(f, 'det_score', 0)))
+        input_emb = primary.embedding
+
+        candidates = []
+        for known in KNOWN_FACES_CACHE:
+            known_emb_val = known.get("embedding")
+            if not known_emb_val:
+                continue
+            known_emb = np.array(json.loads(known_emb_val) if isinstance(known_emb_val, str) else known_emb_val)
+            sim = float(cosine_similarity(input_emb, known_emb))
+            candidates.append({
+                "id":         known.get("id"),
+                "name":       known.get("name", "Unknown"),
+                "photo_url":  known.get("photo_url"),
+                "similarity": round(sim, 4),
+                "pct":        round(sim * 100, 1),
+                "match":      sim >= MATCH_THRESHOLD,
+            })
+
+        candidates.sort(key=lambda x: x["similarity"], reverse=True)
+        return jsonify({"matches": candidates[:top_n], "threshold": MATCH_THRESHOLD})
+
+    except Exception as e:
+        print(f"top_matches error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/registered_faces", methods=["GET"])
 def get_registered_faces():
     try:
@@ -987,12 +1259,39 @@ def get_face_logs():
         res = supabase.table("face_logs").select("*").order("created_at", desc=True).limit(50).execute()
         return jsonify(res.data or [])
     except Exception as e:
-        # Try with 'timestamp' column as fallback
         try:
             res = supabase.table("face_logs").select("*").order("timestamp", desc=True).limit(50).execute()
             return jsonify(res.data or [])
         except Exception as e2:
             return jsonify({"error": str(e2)}), 500
+
+@app.route("/api/presence/<camera_id>", methods=["GET"])
+def get_presence(camera_id):
+    """
+    Returns the list of people CONFIRMED present at a camera.
+    A person is confirmed only after being seen in 3+ consecutive frames (no false positives).
+    """
+    presence_cleanup(camera_id)
+    now = time.time()
+    with PRESENCE_LOCK:
+        tracker = dict(PRESENCE_TRACKER.get(camera_id, {}))
+    
+    present = []
+    for name, data in tracker.items():
+        if data.get("confirmed") and name != "Unknown":
+            scores = data.get("scores", [1.0])
+            present.append({
+                "name":        name,
+                "confidence":  round(sum(scores) / len(scores), 4),
+                "seen_frames": data["frames"],
+                "last_seen":   data["last_seen"],
+                "seconds_ago": round(now - data["last_seen"], 1),
+                "photo_url":   data.get("photo_url"),
+                "crop":        data.get("crop"),
+            })
+    
+    present.sort(key=lambda x: x["last_seen"], reverse=True)
+    return jsonify({"camera_id": camera_id, "present": present, "count": len(present)})
 
 import concurrent.futures
 
@@ -1001,61 +1300,114 @@ WS_CLIENTS = set()
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 def process_ws_frame(camera_id, image_b64):
+    """
+    HIGH-PRECISION WebSocket frame processor.
+    Pipeline: Decode → YOLO bodies → InsightFace detect → Enhance crop → Extract embedding → Match
+    Each matched face is confirmed via the temporal presence tracker (3-frame rule).
+    """
     img = base64_to_cv2(image_b64)
     if img is None: return None
     
     h, w = img.shape[:2]
     
+    # ── 1. YOLO Body Detection ───────────────────────────────────────────────
     bodies = []
     if 'yolo_app' in globals() and yolo_app is not None:
         try:
             results = yolo_app(img, verbose=False)
             for r in results:
                 for box in r.boxes:
+                    if int(box.cls[0]) != 0: continue # Only persons
                     x1, y1, x2, y2 = box.xyxy[0].tolist()
                     conf = float(box.conf[0])
-                    bodies.append([x1, y1, x2, y2, conf])
+                    if conf >= 0.40:  # Only confident body detections
+                        bodies.append([x1, y1, x2, y2, conf])
         except Exception: pass
-        
+    
+    # ── 2. InsightFace Face Detection ────────────────────────────────────────
     faces = face_app.get(img)
     detections = []
+    presence_cleanup(camera_id)
+    
     if faces:
         for face in faces:
             det_score = float(getattr(face, "det_score", 1.0))
-            if det_score < 0.5: continue
+            # CCTV-friendly detection threshold
+            if det_score < 0.35: continue
             
             bbox = face.bbox.astype(int).tolist()
             x1, y1 = max(0, bbox[0]), max(0, bbox[1])
             x2, y2 = min(w, bbox[2]), min(h, bbox[3])
+            if (x2 - x1) < 15 or (y2 - y1) < 15: continue
             
-            face_crop = img[y1:y2, x1:x2]
-            crop_b64 = cv2_to_base64(face_crop) if face_crop.size > 0 else None
-            
+            raw_crop = img[y1:y2, x1:x2]
+            if raw_crop.size == 0: continue
+            enhanced_crop = enhance_face_for_embedding(raw_crop.copy())
+            crop_b64 = cv2_to_base64(enhanced_crop if enhanced_crop is not None else raw_crop)
+
+            # ── 3. Quick Initial Match (Pass 1) ──────────────────────────────
+            embedding = face.embedding
             lm = getattr(face, "landmark_2d_106", None)
+            best_known, best_score = match_embedding(embedding, KNOWN_FACES_CACHE, 0.35)
+            
+            # ── 4. HD Crop Enhancement (Pass 2 - Only if Unknown) ────────────
+            if not best_known and enhanced_crop is not None:
+                try:
+                    enhanced_faces = face_app.get(enhanced_crop)
+                    if enhanced_faces:
+                        best_enh = max(enhanced_faces, key=lambda f: (
+                            (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1])))
+                        enh_emb = best_enh.embedding
+                        enh_known, enh_score = match_embedding(enh_emb, KNOWN_FACES_CACHE, 0.35)
+                        if enh_known:
+                            best_known = enh_known
+                            best_score = enh_score
+                            lm = getattr(best_enh, "landmark_2d_106", None)
+                except Exception:
+                    pass
+            
             landmarks = lm.astype(float).tolist() if lm is not None else []
             
-            best_known, best_score = match_embedding(face.embedding, KNOWN_FACES_CACHE, MATCH_THRESHOLD)
+            # ── 5. Temporal Presence Confirmation ────────────────────────────
             if best_known:
-                log_match(camera_id, best_known["name"], best_score, crop_b64)
-            
-            det = {
-                "matched": bool(best_known),
-                "name": best_known["name"] if best_known else "Unknown",
-                "confidence": round(best_score, 4) if best_known else round(max(best_score, 0.0), 4),
-                "photo_url": best_known.get("photo_url") if best_known else None,
-                "bbox": bbox,
-                "crop_b64": crop_b64,
-                "det_score": round(det_score, 3),
-                "landmarks": landmarks,
-                "camera_id": camera_id
-            }
-            detections.append(det)
-            
+                confirmed, avg_score = presence_update(
+                    camera_id, best_known["name"], best_score,
+                    best_known.get("photo_url"), crop_b64
+                )
+                # Only log to DB once presence is confirmed (3+ frames)
+                if confirmed:
+                    log_match(camera_id, best_known["name"], avg_score, crop_b64)
+                detections.append({
+                    "matched":    True,
+                    "confirmed":  confirmed,
+                    "name":       best_known["name"],
+                    "confidence": round(avg_score, 4),
+                    "photo_url":  best_known.get("photo_url"),
+                    "bbox":       bbox,
+                    "crop_b64":   crop_b64,
+                    "det_score":  round(det_score, 3),
+                    "landmarks":  landmarks,
+                    "camera_id":  camera_id
+                })
+            else:
+                detections.append({
+                    "matched":    False,
+                    "confirmed":  False,
+                    "name":       "Unknown",
+                    "confidence": round(max(best_score, 0.0), 4),
+                    "photo_url":  None,
+                    "bbox":       bbox,
+                    "crop_b64":   crop_b64,
+                    "det_score":  round(det_score, 3),
+                    "landmarks":  landmarks,
+                    "camera_id":  camera_id
+                })
+    
     return {
-        "camera_id": camera_id,
-        "detections": detections,
-        "bodies": bodies,
-        "frame_width": w,
+        "camera_id":    camera_id,
+        "detections":   detections,
+        "bodies":       bodies,
+        "frame_width":  w,
         "frame_height": h
     }
 
