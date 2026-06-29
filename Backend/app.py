@@ -62,7 +62,8 @@ face_app = None
 for model_name in ["buffalo_l", "buffalo_sc"]:
     try:
         candidate = FaceAnalysis(name=model_name, providers=["CPUExecutionProvider"])
-        candidate.prepare(ctx_id=-1, det_size=(1280, 1280))
+        # OPTIMIZATION: Reduced det_size from 1280 to 640 for significantly lower latency on CPU
+        candidate.prepare(ctx_id=-1, det_size=(640, 640))
         face_app = candidate
         print(f"InsightFace '{model_name}' model loaded successfully.")
         break

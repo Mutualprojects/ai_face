@@ -390,7 +390,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
               ws.send(JSON.stringify({ camera_id: streamName, image }));
             }
           }
-        }, 120); // 120ms polling interval avoids flooding the network
+        }, 120); // Reverted back to 120ms to fix frontend camera stuttering
       };
       
       ws.onmessage = (event) => {
