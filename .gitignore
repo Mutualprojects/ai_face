@@ -2,6 +2,7 @@
 front_end/node_modules/
 front_end/.next/
 front_end/npm_run.log
+*.log
 
 # Python
 Backend/venv/

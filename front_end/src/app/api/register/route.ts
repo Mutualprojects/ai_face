@@ -35,7 +35,17 @@ async function uploadBase64ToStorage(base64Str: string, path: string): Promise<s
 
 export async function POST(request: Request) {
   try {
-    const { name, image } = await request.json();
+    const payload = await request.json();
+    const {
+      name,
+      image,
+      employee_code,
+      department,
+      designation,
+      email,
+      mobile,
+      is_active,
+    } = payload;
 
     if (!name || !image) {
       return NextResponse.json({ error: "Missing name or image" }, { status: 400 });
@@ -44,7 +54,7 @@ export async function POST(request: Request) {
     // 1. Call the Python backend to extract the face embedding and cropped face base64
     const extractRes = await fetch(`${backendUrl}/api/extract`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.API_KEY || process.env.NEXT_PUBLIC_API_KEY || "" },
       body: JSON.stringify({ image }),
     });
 
@@ -71,6 +81,12 @@ export async function POST(request: Request) {
         name,
         embedding,
         photo_url: cropPublicUrl,
+        employee_code: employee_code || null,
+        department: department || null,
+        designation: designation || null,
+        email: email || null,
+        mobile: mobile || null,
+        is_active: is_active ?? true,
       })
       .select()
       .single();
@@ -78,6 +94,16 @@ export async function POST(request: Request) {
     if (error) {
       console.error("Supabase insert error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // 4. Trigger Python backend cache refresh
+    try {
+      await fetch(`${backendUrl}/api/refresh_cache`, {
+        method: "POST",
+        headers: { "x-api-key": process.env.API_KEY || process.env.NEXT_PUBLIC_API_KEY || "" }
+      });
+    } catch (refreshErr) {
+      console.error("Failed to trigger python backend cache refresh:", refreshErr);
     }
 
     return NextResponse.json({

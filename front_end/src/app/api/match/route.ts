@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     // 1. Call Python backend /api/match — returns detections array (all faces in frame)
     const matchRes = await fetch(`${backendUrl}/api/match`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.API_KEY || process.env.NEXT_PUBLIC_API_KEY || "" },
       body: JSON.stringify({ image }),
     });
 

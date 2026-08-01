@@ -3,6 +3,7 @@ export type PlayState = "connecting" | "playing" | "error" | "offline";
 
 export interface Detection {
   matched: boolean;
+  confirmed?: boolean;      // true = presence confirmed (≥2 frames); false/undefined = tentative match
   name: string;
   confidence: number;
   photo_url?: string | null;
@@ -10,6 +11,7 @@ export interface Detection {
   crop_b64?: string | null;
   det_score?: number;
   landmarks?: [number, number][];
+  top3?: { name: string; score: number; photo_url?: string | null }[];
 }
 
 export interface MatchResponse {

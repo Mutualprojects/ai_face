@@ -1,0 +1,295 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   login.module.css  —  Sentinel AI Clean White Split Login Page
+   Clean White UI · Split Screen · Cybersecurity Concept Illustration
+═══════════════════════════════════════════════════════════════════════════ */
+
+.root {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  padding: 24px;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Subtle background pattern */
+.bgPattern {
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(#cbd5e1 0.75px, transparent 0.75px),
+    radial-gradient(#cbd5e1 0.75px, #f8fafc 0.75px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Main Split Card */
+.card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 960px;
+  min-height: 560px;
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+  box-shadow:
+    0 25px 50px -12px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(99, 102, 241, 0.05);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+}
+
+/* Left Form Section */
+.leftPanel {
+  padding: 48px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.brandHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.brandLogo {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  color: #ffffff;
+}
+
+.brandTitle {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.brandSubtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.titleArea {
+  margin-bottom: 24px;
+}
+
+.heading {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/* Form Styles */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.capsBadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  height: 46px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0 40px 0 42px;
+  font-size: 14px;
+  color: #0f172a;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  background: #ffffff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.12);
+}
+
+.inputError {
+  border-color: #ef4444 !important;
+  background: #fff5f5 !important;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  border-radius: 6px;
+  transition: color 0.2s;
+}
+
+.eyeBtn:hover {
+  color: #475569;
+}
+
+.fieldErrText {
+  font-size: 11.5px;
+  color: #ef4444;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* Alert Banner */
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+/* Submit Button */
+.submitBtn {
+  height: 48px;
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  color: #ffffff;
+  font-size: 14.5px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  transition: all 0.2s ease;
+  margin-top: 4px;
+}
+
+.submitBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+  background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+}
+
+.submitBtn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submitBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btnSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Right Panel */
+.rightPanel {
+  background: #ffffff;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.illustrationWrap {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.illustration {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Mobile Responsive */
+@media (max-width: 840px) {
+  .card {
+    grid-template-columns: 1fr;
+    max-width: 460px;
+  }
+  .rightPanel {
+    display: none;
+  }
+}

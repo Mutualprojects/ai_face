@@ -52,9 +52,8 @@ def build_mediamtx_src(rtsp_url: str) -> dict:
         
         return {
             "source": "publisher",
-            "runOnDemand": f"ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt -flags low_delay -rtsp_transport tcp -i '{decoded_url}' {vf_scale}-c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH",
-            "runOnDemandRestart": True,
-            "runOnDemandCloseAfter": "10s"
+            "runOnInit": f"ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt -flags low_delay -rtsp_transport tcp -timeout 5000000 -i '{decoded_url}' {vf_scale}-c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -rtsp_transport tcp -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH",
+            "runOnInitRestart": True
         }
     return {"source": decoded_url}
 
@@ -80,6 +79,10 @@ def main():
             match = re.search(r'-i\s+[\'"]?(rtsp://[^\s\'"]+)[\'"]?', info["runOnInit"])
             if match:
                 rtsp_url = match.group(1)
+        elif "runOnDemand" in info:
+            match = re.search(r'-i\s+[\'"]?(rtsp://[^\s\'"]+)[\'"]?', info["runOnDemand"])
+            if match:
+                rtsp_url = match.group(1)
 
         if rtsp_url:
             camera_urls[cam_id] = unquote(rtsp_url)
@@ -90,7 +93,7 @@ def main():
         cfg["paths"][cam_id] = new_cfg
         
     with open(MEDIAMTX_YAML, "w") as f:
-        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, width=float("inf"))
 
     print("\nRegeneration completed.")
 

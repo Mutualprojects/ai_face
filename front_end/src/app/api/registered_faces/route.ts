@@ -10,12 +10,12 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("known_faces")
-      .select("id, name, photo_url, created_at")
+      .select("id, name, photo_url, created_at, employee_code, department, designation, email, mobile, is_active")
       .order("name");
 
     if (error) {
       console.error("Supabase fetch error:", error);
-      return NextResponse.json({ error: error.message }, { status: 550 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json(data || []);
