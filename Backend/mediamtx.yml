@@ -149,6 +149,8 @@ paths:
     source: publisher
   camera_0ea95c80:
     source: rtmp://lb.hf4g.live:1935/live/HF4G161063
+  camera_4113781f:
+    source: rtsp://admin:admin@172.21.0.79:554/unicast/c1/s0
   camera_6ff83820:
     runOnInit: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
       -flags low_delay -rtsp_transport tcp -timeout 5000000 -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c3/s0'
@@ -164,6 +166,14 @@ paths:
       yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -rtsp_transport tcp -f rtsp
       rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnInitRestart: true
+    source: publisher
+  camera_ab36953f:
+    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
+      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:admin@172.23.0.79:554/rtsp/streaming?channel=01&subtype=0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
     source: publisher
   camera_bff4dca0:
     source: rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c8/s0
