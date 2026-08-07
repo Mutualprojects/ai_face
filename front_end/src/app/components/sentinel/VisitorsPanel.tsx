@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   User, Phone, Building2, CreditCard, Camera, Upload, PenLine,
   Check, ChevronLeft, ChevronRight, Search, RotateCcw, Loader2,
-  LayoutGrid, List, Kanban, Table, Filter, Clock, CheckCircle2, UserX
+  LayoutGrid, List, Kanban, Table, Filter, Clock, CheckCircle2, UserX, X
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -181,6 +181,57 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   const [statusFilter, setStatusFilter] = useState<"all" | "checked-in" | "checked-out">("all");
   const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose | string>("all");
   const [isFetchingLogs, setIsFetchingLogs] = useState(true);
+
+  // Edit / Delete State
+  const [editingVisitor, setEditingVisitor] = useState<VisitorRecord | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const handleDeleteVisitor = async (visitorId: string) => {
+    if (!confirm("Are you sure you want to completely delete this visitor record? This action cannot be undone.")) return;
+    
+    setIsDeleting(visitorId);
+    try {
+      const res = await fetch(`/api/visitors?visitor_id=${visitorId}`, { method: "DELETE" });
+      if (res.ok) {
+        await loadVisitors();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete visitor.");
+      }
+    } catch (err) {
+      console.error("Error deleting visitor:", err);
+      alert("Network error while deleting visitor.");
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVisitor) return;
+    
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch("/api/visitors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingVisitor)
+      });
+      if (res.ok) {
+        setEditingVisitor(null);
+        await loadVisitors();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update visitor.");
+      }
+    } catch (err) {
+      console.error("Error saving visitor edit:", err);
+      alert("Network error while updating visitor.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   const loadVisitors = async () => {
     setIsFetchingLogs(true);
@@ -531,6 +582,47 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 8px", background: "rgba(5, 150, 105, 0.1)", color: T.ok, fontSize: 11, borderRadius: 20, fontWeight: 600 }}><Clock size={12} /> Active now</span>;
   };
 
+  const renderActionButtons = (v: VisitorRecord) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      {!v.check_out_time ? (
+        <button
+          onClick={() => handleCheckout(v.visitor_id)}
+          disabled={checkingOutId === v.visitor_id}
+          className="vr-btn"
+          style={{
+            padding: "4px 10px", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)",
+            borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 600, cursor: "pointer",
+            display: "inline-flex", alignItems: "center", gap: 4
+          }}
+        >
+          {checkingOutId === v.visitor_id ? <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} /> : null}
+          Check Out
+        </button>
+      ) : (
+        <span style={{ fontSize: 11, color: T.textFaint, padding: "4px 0" }}>
+          Out: {new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      )}
+      <button 
+        onClick={() => setEditingVisitor(v)}
+        className="vr-btn"
+        title="Edit Visitor"
+        style={{ padding: "4px 8px", background: "rgba(79, 70, 229, 0.08)", border: "1px solid rgba(79, 70, 229, 0.2)", borderRadius: 6, color: T.accent, cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+      >
+        <PenLine size={13} />
+      </button>
+      <button 
+        onClick={() => handleDeleteVisitor(v.visitor_id)}
+        disabled={isDeleting === v.visitor_id}
+        className="vr-btn"
+        title="Delete Visitor"
+        style={{ padding: "4px 8px", background: "rgba(100, 116, 139, 0.08)", border: "1px solid rgba(100, 116, 139, 0.2)", borderRadius: 6, color: T.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+      >
+        {isDeleting === v.visitor_id ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <UserX size={13} />}
+      </button>
+    </div>
+  );
+
   const renderTableView = () => (
     <div style={{ overflowX: "auto", background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 16 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, textAlign: "left" }}>
@@ -570,35 +662,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
                 {new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </td>
               <td style={{ padding: "12px 16px" }}>
-                {!v.check_out_time ? (
-                  <button
-                    onClick={() => handleCheckout(v.visitor_id)}
-                    disabled={checkingOutId === v.visitor_id}
-                    className="vr-btn"
-                    style={{
-                      padding: "4px 10px",
-                      background: "rgba(239, 68, 68, 0.08)",
-                      border: "1px solid rgba(239, 68, 68, 0.2)",
-                      borderRadius: 6,
-                      color: "#ef4444",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4
-                    }}
-                  >
-                    {checkingOutId === v.visitor_id ? (
-                      <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} />
-                    ) : null}
-                    Check Out
-                  </button>
-                ) : (
-                  <span style={{ fontSize: 11, color: T.textFaint }}>
-                    Out: {new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
+                {renderActionButtons(v)}
               </td>
             </tr>
           ))}
@@ -634,35 +698,9 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
             {new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
-        {!v.check_out_time && (
-          <div style={{ marginTop: 10 }}>
-            <button
-              onClick={() => handleCheckout(v.visitor_id)}
-              disabled={checkingOutId === v.visitor_id}
-              className="vr-btn"
-              style={{
-                width: "100%",
-                padding: "6px 0",
-                background: "rgba(239, 68, 68, 0.08)",
-                border: "1px solid rgba(239, 68, 68, 0.2)",
-                borderRadius: 8,
-                color: "#ef4444",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6
-              }}
-            >
-              {checkingOutId === v.visitor_id ? (
-                <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
-              ) : null}
-              Check Out
-            </button>
-          </div>
-        )}
+        <div style={{ marginTop: 10 }}>
+          {renderActionButtons(v)}
+        </div>
       </div>
     );
 
@@ -712,38 +750,9 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
                 </div>
               </div>
             </div>
-            {!v.check_out_time ? (
-              <button
-                onClick={() => handleCheckout(v.visitor_id)}
-                disabled={checkingOutId === v.visitor_id}
-                className="vr-btn"
-                style={{
-                  width: "100%",
-                  padding: "7px 0",
-                  background: "rgba(239, 68, 68, 0.08)",
-                  border: "1px solid rgba(239, 68, 68, 0.2)",
-                  borderRadius: 8,
-                  color: "#ef4444",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6
-                }}
-              >
-                {checkingOutId === v.visitor_id ? (
-                  <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
-                ) : null}
-                Check Out
-              </button>
-            ) : (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: T.textFaint, paddingTop: 4 }}>
-                <span>Checked out</span>
-                <span>{new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            )}
+            <div style={{ paddingTop: 4 }}>
+              {renderActionButtons(v)}
+            </div>
           </div>
         </div>
       ))}
@@ -771,31 +780,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
               <span style={{ fontSize: 11, color: T.textFaint }}>{new Date(v.check_in_time).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
             </div>
             {renderStatusBadge(v)}
-            {!v.check_out_time ? (
-              <button
-                onClick={() => handleCheckout(v.visitor_id)}
-                disabled={checkingOutId === v.visitor_id}
-                className="vr-btn"
-                style={{
-                  padding: "6px 12px",
-                  background: "rgba(239, 68, 68, 0.08)",
-                  border: "1px solid rgba(239, 68, 68, 0.2)",
-                  borderRadius: 8,
-                  color: "#ef4444",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4
-                }}
-              >
-                {checkingOutId === v.visitor_id ? (
-                  <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
-                ) : null}
-                Check Out
-              </button>
-            ) : null}
+            {renderActionButtons(v)}
           </div>
         </div>
       ))}
@@ -864,16 +849,11 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
       <div className="vr-shell">
         {/* ---------------- LEFT: form ---------------- */}
         <div style={{ background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 18, padding: "28px 28px 24px", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-            <div>
-              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.14em", color: T.accent, margin: "0 0 4px", textTransform: "uppercase" }}>
-                Sentinel Kiosk
-              </p>
-              <h1 style={{ fontFamily: "Fraunces, serif", fontWeight: 600, fontSize: 24, color: T.text, margin: 0 }}>
-                New Visitor
-              </h1>
-            </div>
-            <div style={{ fontSize: 13, color: T.textMuted, fontWeight: 500, background: T.paper, padding: "4px 10px", borderRadius: 20, border: `1px solid ${T.line}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: T.accent, textTransform: "uppercase" }}>
+              Visitor Registration Kiosk
+            </span>
+            <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 600, background: T.paper, padding: "4px 10px", borderRadius: 20, border: `1px solid ${T.line}` }}>
               Step {step} of 3
             </div>
           </div>
@@ -1213,6 +1193,48 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingVisitor && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: T.bgPanel, borderRadius: 16, width: "100%", maxWidth: 500, overflow: "hidden", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)" }}>
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: T.text }}>Edit Visitor</h3>
+              <button onClick={() => setEditingVisitor(null)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", padding: 4 }}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSaveEdit} style={{ padding: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Full Name</label>
+                  <input required type="text" value={editingVisitor.full_name} onChange={e => setEditingVisitor({ ...editingVisitor, full_name: e.target.value })} style={input} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Phone Number</label>
+                  <input required type="text" value={editingVisitor.phone} onChange={e => setEditingVisitor({ ...editingVisitor, phone: e.target.value })} style={input} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Company Name</label>
+                  <input type="text" value={editingVisitor.company_name || ""} onChange={e => setEditingVisitor({ ...editingVisitor, company_name: e.target.value })} style={input} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Purpose of Visit</label>
+                  <input required type="text" value={editingVisitor.purpose_of_visit} onChange={e => setEditingVisitor({ ...editingVisitor, purpose_of_visit: e.target.value })} style={input} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Host Employee ID</label>
+                  <input required type="text" value={editingVisitor.meet_employee_id} onChange={e => setEditingVisitor({ ...editingVisitor, meet_employee_id: e.target.value })} style={input} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+                <button type="button" onClick={() => setEditingVisitor(null)} style={{ ...btnSecondary, margin: 0, flex: 1 }}>Cancel</button>
+                <button type="submit" disabled={isSavingEdit} style={{ ...btnPrimary, flex: 1 }}>
+                  {isSavingEdit ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

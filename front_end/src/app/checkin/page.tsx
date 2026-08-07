@@ -61,6 +61,13 @@ export default function PublicCheckInPage() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
 
+  // Location (Appointments only)
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string>("");
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState("");
+
   // Step 3: Verify (Camera & Signature)
   const [photo, setPhoto] = useState<string | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
@@ -98,6 +105,45 @@ export default function PublicCheckInPage() {
     }
     loadHosts();
   }, []);
+
+  // Capture location if purpose is "Meeting"
+  useEffect(() => {
+    if (purpose === "Meeting" && !latitude && !locationLoading && !locationError && !locationAddress) {
+      setLocationLoading(true);
+      setLocationError("");
+      
+      if (!navigator.geolocation) {
+        setLocationError("Geolocation is not supported by your browser.");
+        setLocationLoading(false);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          setLatitude(lat);
+          setLongitude(lon);
+          
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+            const data = await res.json();
+            if (data && data.display_name) {
+              setLocationAddress(data.display_name);
+            }
+          } catch (err) {
+            console.error("Geocoding failed:", err);
+          }
+          setLocationLoading(false);
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          setLocationError("Location permission denied or unavailable.");
+          setLocationLoading(false);
+        }
+      );
+    }
+  }, [purpose, latitude, locationLoading, locationError, locationAddress]);
 
   // Set up camera automatically on step 3
   useEffect(() => {
@@ -227,6 +273,9 @@ export default function PublicCheckInPage() {
       photo_image: photo,
       signature_image: signatureImage,
       badge_no: badgeNo,
+      latitude,
+      longitude,
+      location_address: locationAddress,
     };
 
     try {
@@ -294,8 +343,7 @@ export default function PublicCheckInPage() {
           border: `1px solid ${T.border}`,
           borderRadius: 24,
           padding: "36px 36px",
-          backdropFilter: "blur(20px)",
-          boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)",
+          boxShadow: "0 20px 50px rgba(15,23,42,0.10), 0 2px 8px rgba(15,23,42,0.05)",
           display: "grid",
           gridTemplateColumns: checkedIn ? "1fr" : "1.6fr 1fr",
           gap: 40,
@@ -346,13 +394,14 @@ export default function PublicCheckInPage() {
                           width: 26,
                           height: 26,
                           borderRadius: "50%",
-                          background: step === s.stepNum ? T.accent : step > s.stepNum ? T.ok : "rgba(255,255,255,0.05)",
+                          background: step === s.stepNum ? T.accent : step > s.stepNum ? T.ok : "#eef0f6",
+                          border: step === s.stepNum || step > s.stepNum ? "none" : `1px solid ${T.border}`,
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           fontSize: 11,
                           fontWeight: 700,
-                          color: "#fff",
+                          color: step === s.stepNum || step > s.stepNum ? "#fff" : T.textMuted,
                         }}
                       >
                         {step > s.stepNum ? <Check size={12} /> : s.stepNum}
@@ -491,9 +540,9 @@ export default function PublicCheckInPage() {
                             onClick={() => setPurpose(p)}
                             style={{
                               flex: 1,
-                              background: purpose === p ? T.accent : "rgba(255,255,255,0.03)",
-                              border: `1px solid ${purpose === p ? T.accent : T.border}`,
-                              color: "#fff",
+                              background: purpose === p ? T.accent : T.bgField,
+                              border: `1px solid ${purpose === p ? T.accent : T.borderStrong}`,
+                              color: purpose === p ? "#fff" : T.text,
                               borderRadius: 10,
                               padding: "10px 0",
                               fontSize: 13,
@@ -540,7 +589,7 @@ export default function PublicCheckInPage() {
                           marginTop: 10,
                           border: `1px solid ${T.border}`,
                           borderRadius: 12,
-                          background: "rgba(0,0,0,0.2)",
+                          background: "#fbfbfe",
                         }}
                       >
                         {filteredHosts.length === 0 ? (
@@ -578,6 +627,38 @@ export default function PublicCheckInPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Location capture UI for Appointments */}
+                    {purpose === "Meeting" && (
+                      <div style={{ padding: 12, background: "rgba(16,185,129,0.05)", borderRadius: 12, border: "1px dashed rgba(16,185,129,0.3)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                          </svg>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Secure Appointment Verification</span>
+                        </div>
+                        
+                        {locationLoading ? (
+                          <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: "spin 1s linear infinite" }}>
+                              <circle cx="12" cy="12" r="10" strokeOpacity="0.2" />
+                              <path d="M12 2a10 10 0 0 1 10 10" />
+                            </svg>
+                            Verifying physical location...
+                          </div>
+                        ) : locationError ? (
+                          <div style={{ fontSize: 11, color: "#dc2626", fontWeight: 600 }}>
+                            {locationError}
+                          </div>
+                        ) : locationAddress ? (
+                          <div style={{ fontSize: 11, color: "#059669", fontWeight: 600, display: "flex", flexDirection: "column", gap: 2 }}>
+                            <span>✓ Verified</span>
+                            <span style={{ fontSize: 10, color: "#10b981", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{locationAddress}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -593,9 +674,9 @@ export default function PublicCheckInPage() {
                       <div
                         style={{
                           aspectRatio: "4/3",
-                          border: `1px dashed ${T.border}`,
+                          border: `1px dashed ${T.borderStrong}`,
                           borderRadius: 12,
-                          background: "rgba(0,0,0,0.2)",
+                          background: "#fbfbfe",
                           overflow: "hidden",
                           position: "relative",
                           display: "flex",
@@ -675,9 +756,9 @@ export default function PublicCheckInPage() {
                       <div
                         style={{
                           aspectRatio: "4/3",
-                          border: `1px dashed ${T.border}`,
+                          border: `1px dashed ${T.borderStrong}`,
                           borderRadius: 12,
-                          background: "rgba(255,255,255,0.01)",
+                          background: "#ffffff",
                           position: "relative",
                         }}
                       >
@@ -733,9 +814,9 @@ export default function PublicCheckInPage() {
                     onClick={() => setStep((s) => (s - 1) as any)}
                     style={{
                       flex: 1,
-                      background: "rgba(255,255,255,0.03)",
-                      border: `1px solid ${T.border}`,
-                      color: "#fff",
+                      background: "#f3f4f8",
+                      border: `1px solid ${T.borderStrong}`,
+                      color: T.text,
                       borderRadius: 12,
                       padding: "12px 0",
                       fontSize: 13.5,
@@ -812,7 +893,7 @@ export default function PublicCheckInPage() {
         {!checkedIn && (
           <div
             style={{
-              background: "rgba(255, 255, 255, 0.02)",
+              background: "#fbfbfe",
               border: `1px solid ${T.border}`,
               borderRadius: 20,
               padding: 24,
@@ -821,7 +902,7 @@ export default function PublicCheckInPage() {
               alignItems: "center",
               justifyContent: "space-between",
               textAlign: "center",
-              boxShadow: "inset 0 0 20px rgba(0,0,0,0.5)",
+              boxShadow: "0 10px 30px rgba(15,23,42,0.05), inset 0 0 0 1px rgba(99,102,241,0.05)",
             }}
           >
             <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
@@ -834,7 +915,7 @@ export default function PublicCheckInPage() {
                   borderRadius: "50%",
                   border: `2px solid ${T.borderStrong}`,
                   overflow: "hidden",
-                  background: "rgba(0,0,0,0.3)",
+                  background: "#eef0f6",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -849,7 +930,7 @@ export default function PublicCheckInPage() {
               </div>
 
               <div>
-                <h4 style={{ fontSize: 17, fontWeight: 800, margin: "0 0 4px 0", color: fullName.trim() ? "#fff" : T.textFaint }}>
+                <h4 style={{ fontSize: 17, fontWeight: 800, margin: "0 0 4px 0", color: fullName.trim() ? T.text : T.textFaint }}>
                   {fullName.trim() || "Your Name"}
                 </h4>
                 <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>
@@ -876,8 +957,8 @@ export default function PublicCheckInPage() {
             </div>
 
             <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 24 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: T.textFaint }}>
-                <Video size={12} className="text-emerald-500 animate-pulse" />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#059669", fontWeight: 700 }}>
+                <Video size={12} className="animate-pulse" />
                 <span>SENTINEL SCAN ACTIVE</span>
               </div>
             </div>

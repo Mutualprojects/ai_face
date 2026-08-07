@@ -147,9 +147,14 @@ export default function SentinelDashboard() {
   useEffect(() => {
     loadData();
 
-    // Live Clock
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    // Live Clock & Real-time camera recognition data polling (every 1.5 seconds)
+    const clockTimer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const dataTimer = setInterval(() => loadData(), 1500);
+
+    return () => {
+      clearInterval(clockTimer);
+      clearInterval(dataTimer);
+    };
   }, []);
 
   // Derived Metrics

@@ -1,11 +1,56 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { FaceLog, RegisteredFace } from "./types";
+import {
+  Clock,
+  RefreshCw,
+  Download,
+  Search,
+  X,
+  LayoutGrid,
+  List as ListIcon,
+  Table as TableIcon,
+  Kanban as KanbanIcon,
+  Camera,
+  Trash2,
+  UserCheck,
+  UserX,
+  AlertTriangle,
+  Database,
+  TrendingUp,
+  Maximize2,
+  Copy,
+  Check,
+  Building2,
+  ArrowRight,
+  Sparkles,
+  SlidersHorizontal,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  ShieldAlert,
+  User,
+  Users
+} from "lucide-react";
 
 interface Top3Candidate {
   name: string;
   score: number;
   photo_url?: string | null;
+}
+
+interface EnrichedFaceLog extends FaceLog {
+  top3?: Top3Candidate[];
+  camera_id?: string;
+  camera_name?: string;
+  camera_location?: string;
+  camera_zone?: string;
+  registered_photo?: string | null;
+  employee_code?: string | null;
+  department?: string | null;
+  designation?: string | null;
+  is_unknown?: boolean;
+  det_score?: number;
 }
 
 interface Props {
@@ -15,15 +60,35 @@ interface Props {
   autoRefresh?: boolean;
 }
 
-type FilterTab = "all" | "matched" | "unknown";
+type FilterTab = "all" | "matched" | "unknown" | "high" | "visitors";
+type SortOption = "newest" | "oldest" | "conf_desc" | "conf_asc";
+type ViewMode = "cards" | "list" | "table" | "kanban";
 
 function timeAgo(ts?: string) {
   if (!ts) return "";
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 0) return "just now";
   if (diff < 5) return "just now";
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function formatDate(ts?: string) {
+  if (!ts) return "";
+  try {
+    return new Date(ts).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return ts;
+  }
 }
 
 function ConfidenceMeter({ value, color }: { value: number; color: string }) {
@@ -31,15 +96,16 @@ function ConfidenceMeter({ value, color }: { value: number; color: string }) {
   return (
     <div style={{ marginTop: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-        <span style={{ fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Confidence</span>
+        <span style={{ fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Confidence Score</span>
         <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color }}>{pct}%</span>
       </div>
       <div style={{ height: 5, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" }}>
         <div style={{
           height: "100%", width: `${pct}%`, borderRadius: 3,
-          background: pct >= 70 ? "#10b981"
-            : pct >= 45 ? "#f59e0b"
-            : "#ef4444",
+          background: pct >= 70 ? "linear-gradient(90deg, #10b981, #059669)"
+            : pct >= 50 ? "linear-gradient(90deg, #3b82f6, #2563eb)"
+            : pct >= 35 ? "linear-gradient(90deg, #f59e0b, #d97706)"
+            : "linear-gradient(90deg, #ef4444, #dc2626)",
           transition: "width 0.4s ease",
         }} />
       </div>
@@ -50,9 +116,10 @@ function ConfidenceMeter({ value, color }: { value: number; color: string }) {
 function Top3Comparison({ candidates, faces }: { candidates: Top3Candidate[], faces: RegisteredFace[] }) {
   if (!candidates || candidates.length === 0) return null;
   return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }}>
-        Top candidates from gallery
+    <div style={{ marginTop: 8, background: "#f8fafc", padding: "6px 8px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+      <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+        <Sparkles size={10} color="#6366f1" />
+        Top Gallery Match Candidates
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         {candidates.map((c, i) => {
@@ -61,36 +128,34 @@ function Top3Comparison({ candidates, faces }: { candidates: Top3Candidate[], fa
           const pct = Math.round(c.score * 100);
           const isTop = i === 0;
           return (
-            <div key={c.name} style={{
-              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              background: isTop ? "rgba(99,102,241,0.06)" : "#f9fafb",
-              border: `1px solid ${isTop ? "rgba(99,102,241,0.3)" : "#e5e7eb"}`,
-              borderRadius: 8, padding: "6px 4px",
+            <div key={c.name + i} style={{
+              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+              background: isTop ? "rgba(99,102,241,0.06)" : "#ffffff",
+              border: `1px solid ${isTop ? "rgba(99,102,241,0.3)" : "#e2e8f0"}`,
+              borderRadius: 6, padding: "5px 4px",
             }}>
               {photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={photoUrl} alt={c.name} style={{
-                  width: 36, height: 36, borderRadius: 6, objectFit: "cover",
-                  border: `2px solid ${isTop ? "#6366f1" : "#e5e7eb"}`,
+                  width: 32, height: 32, borderRadius: 6, objectFit: "cover",
+                  border: `1.5px solid ${isTop ? "#6366f1" : "#cbd5e1"}`,
                 }} />
               ) : (
                 <div style={{
-                  width: 36, height: 36, borderRadius: 6,
-                  background: "#e5e7eb",
+                  width: 32, height: 32, borderRadius: 6,
+                  background: "#f1f5f9",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2">
-                    <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-                  </svg>
+                  <User size={14} color="#64748b" />
                 </div>
               )}
-              <div style={{ fontSize: 8.5, color: isTop ? "#4f46e5" : "#374151", fontWeight: 700, textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 8.5, color: isTop ? "#4f46e5" : "#334155", fontWeight: 700, textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {c.name}
               </div>
               <div style={{
-                fontSize: 8.5, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700,
-                color: pct >= 30 ? "#d97706" : "#6b7280",
-                background: pct >= 30 ? "#fef3c7" : "#e5e7eb",
+                fontSize: 8, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700,
+                color: pct >= 40 ? "#d97706" : "#64748b",
+                background: pct >= 40 ? "#fef3c7" : "#f1f5f9",
                 padding: "1px 4px", borderRadius: 3,
               }}>
                 {pct}%
@@ -105,322 +170,1039 @@ function Top3Comparison({ candidates, faces }: { candidates: Top3Candidate[], fa
 
 export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }: Props) {
   const [filter, setFilter] = useState<FilterTab>("all");
-  const [allLogs, setAllLogs] = useState<(FaceLog & { top3?: Top3Candidate[] })[]>(logs);
+  const [cameraFilter, setCameraFilter] = useState<string>("all");
+  const [minConfFilter, setMinConfFilter] = useState<number>(0);
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [cameras, setCameras] = useState<{ id: string; name: string; place: string }[]>([]);
+  const [cameraMap, setCameraMap] = useState<Record<string, string>>({});
+  const [allLogs, setAllLogs] = useState<EnrichedFaceLog[]>(logs as EnrichedFaceLog[]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMsg, setDeleteMsg] = useState("");
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [selectedLog, setSelectedLog] = useState<EnrichedFaceLog | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(12);
 
   const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
 
-  const fetchFilteredLogs = useCallback(async (tab: FilterTab) => {
+  // Fetch camera list for resolving camera IDs -> Names
+  useEffect(() => {
+    const fetchCameras = async () => {
+      try {
+        const res = await fetch(`http://${host}:5000/api/cameras`, {
+          headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
+        });
+        if (res.ok) {
+          const list = await res.json();
+          setCameras(list);
+          const map: Record<string, string> = {};
+          list.forEach((c: any) => {
+            map[c.id] = c.place ? `${c.name} (${c.place})` : c.name;
+          });
+          setCameraMap(map);
+        }
+      } catch {}
+    };
+    fetchCameras();
+  }, [host]);
+
+  const fetchFilteredLogs = useCallback(async () => {
     try {
-      const apiType = tab === "all" ? "all" : tab === "matched" ? "known" : "unknown";
-      const res = await fetch(`http://${host}:5000/api/face_logs?type=${apiType}`, {
-        headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
-      });
+      const res = await fetch("/api/face_logs?limit=all");
       if (res.ok) {
         const data = await res.json();
         setAllLogs(data);
       }
-    } catch {}
-  }, [host]);
-
-  useEffect(() => {
-    fetchFilteredLogs(filter);
-  }, [filter, fetchFilteredLogs]);
-
-  // SSE subscription — real-time push from /api/logs/stream (no polling lag)
-  useEffect(() => {
-    const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    let es: EventSource | null = null;
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
-      es = new EventSource(`http://${host}:5000/api/logs/stream?api_key=${apiKey}`);
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.ping) return; // keepalive
-          setAllLogs(prev => {
-            if (prev.some(l => l.id === data.id)) return prev; // dedup
-            return [data, ...prev].slice(0, 100);
-          });
-        } catch {}
-      };
-      es.onerror = () => { es?.close(); };
-    } catch {}
-    return () => { es?.close(); };
+    } catch (err) {
+      console.error("Error fetching real-time face logs:", err);
+    }
   }, []);
 
   useEffect(() => {
-    if (!autoRefresh) return;
-    intervalRef.current = setInterval(() => fetchFilteredLogs(filter), 2000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [autoRefresh, filter, fetchFilteredLogs]);
+    fetchFilteredLogs();
+    const timer = setInterval(() => fetchFilteredLogs(), 1500);
+    return () => clearInterval(timer);
+  }, [fetchFilteredLogs]);
 
   useEffect(() => {
-    if (filter === "all") setAllLogs(logs);
-  }, [logs, filter]);
+    if (logs && logs.length > 0 && allLogs.length === 0) {
+      setAllLogs(logs as EnrichedFaceLog[]);
+    }
+  }, [logs, allLogs.length]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filter, cameraFilter, minConfFilter, sortBy, viewMode]);
 
   const handleDeleteUnknown = async () => {
+    if (!window.confirm("Are you sure you want to clear ALL unknown face detection logs from the database at once?")) {
+      return;
+    }
     setIsDeleting(true);
     try {
-      const res = await fetch(`http://${host}:5000/api/face_logs/unknown`, {
+      // 1. Try Next.js DELETE route first
+      let res = await fetch("/api/face_logs?type=unknown", {
         method: "DELETE",
-        headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
       });
+      if (!res.ok) {
+        // 2. Try Next.js unknown logs route
+        res = await fetch("/api/logs/unknown", {
+          method: "DELETE",
+        });
+      }
+      if (!res.ok) {
+        // 3. Fall back to Python backend
+        res = await fetch(`http://${host}:5000/api/face_logs/unknown`, {
+          method: "DELETE",
+          headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
+        });
+      }
+
       if (res.ok) {
-        setDeleteMsg("Unknown logs cleared!");
-        fetchFilteredLogs(filter);
+        const data = await res.json();
+        setDeleteMsg(data.deleted_count !== undefined ? `Cleared (${data.deleted_count})!` : "Cleared!");
+        // Immediately filter out local unknown logs
+        setAllLogs(prev => prev.filter(l => l.person_name !== "Unknown"));
+        fetchFilteredLogs();
       } else {
-        setDeleteMsg("Failed to delete.");
+        setDeleteMsg("Failed.");
       }
     } catch {
       setDeleteMsg("Error.");
     }
     setIsDeleting(false);
-    setTimeout(() => setDeleteMsg(""), 3000);
+    setTimeout(() => setDeleteMsg(""), 3500);
   };
 
-  const knownCount  = allLogs.filter(l => l.person_name !== "Unknown").length;
-  const unknownCount = allLogs.filter(l => l.person_name === "Unknown").length;
+  // Export CSV
+  const handleExportCSV = () => {
+    if (allLogs.length === 0) return;
+    const headers = ["ID", "Timestamp", "Person Name", "Confidence %", "Camera", "Location", "Department", "Employee Code", "Status"];
+    const rows = filteredAndSortedLogs.map(l => [
+      l.id,
+      l.timestamp || l.created_at || "",
+      `"${l.person_name.replace(/"/g, '""')}"`,
+      Math.round(l.confidence * 100),
+      `"${(l.camera_name || "").replace(/"/g, '""')}"`,
+      `"${(l.camera_location || "").replace(/"/g, '""')}"`,
+      `"${(l.department || "").replace(/"/g, '""')}"`,
+      `"${(l.employee_code || "").replace(/"/g, '""')}"`,
+      l.person_name !== "Unknown" ? "MATCHED" : "UNKNOWN"
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `face_detection_logs_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-  const displayed = allLogs.filter(log => {
-    if (filter === "matched") return log.person_name !== "Unknown";
-    if (filter === "unknown") return log.person_name === "Unknown";
-    return true;
-  });
+  // Key KPI stats
+  const knownCount = useMemo(() => allLogs.filter(l => l.person_name !== "Unknown" && l.designation?.toLowerCase() !== "visitor" && !l.person_name.toLowerCase().startsWith("visitor:")).length, [allLogs]);
+  const unknownCount = useMemo(() => allLogs.filter(l => l.person_name === "Unknown").length, [allLogs]);
+  const visitorCount = useMemo(() => {
+    return allLogs.filter(l => 
+      l.designation?.toLowerCase() === "visitor" || 
+      l.person_name.toLowerCase().startsWith("visitor:")
+    ).length;
+  }, [allLogs]);
+  const highMatchCount = useMemo(() => allLogs.filter(l => l.person_name !== "Unknown" && l.confidence >= 0.7).length, [allLogs]);
+  const avgConfidence = useMemo(() => {
+    if (allLogs.length === 0) return 0;
+    const sum = allLogs.reduce((acc, curr) => acc + (curr.confidence || 0), 0);
+    return Math.round((sum / allLogs.length) * 100);
+  }, [allLogs]);
+
+  // Filtering and Sorting logic
+  const filteredAndSortedLogs = useMemo(() => {
+    return allLogs
+      .filter(log => {
+        // Status filter tab
+        if (filter === "matched" && (log.person_name === "Unknown" || log.designation?.toLowerCase() === "visitor" || log.person_name.toLowerCase().startsWith("visitor:"))) return false;
+        if (filter === "unknown" && log.person_name !== "Unknown") return false;
+        if (filter === "high" && (log.person_name === "Unknown" || log.confidence < 0.7)) return false;
+        if (filter === "visitors" && !(log.designation?.toLowerCase() === "visitor" || log.person_name.toLowerCase().startsWith("visitor:"))) return false;
+
+        // Camera filter
+        if (cameraFilter !== "all") {
+          const camId = log.camera_id;
+          if (camId && camId !== cameraFilter) return false;
+        }
+
+        // Minimum confidence filter
+        if (log.confidence < minConfFilter) return false;
+
+        // Text Search Query
+        if (searchQuery.trim() !== "") {
+          const q = searchQuery.toLowerCase().trim();
+          const pName = (log.person_name || "").toLowerCase();
+          const cName = (log.camera_name || "").toLowerCase();
+          const cLoc = (log.camera_location || "").toLowerCase();
+          const dept = (log.department || "").toLowerCase();
+          const empCode = (log.employee_code || "").toLowerCase();
+          const desig = (log.designation || "").toLowerCase();
+          const matchText = `${pName} ${cName} ${cLoc} ${dept} ${empCode} ${desig}`;
+          if (!matchText.includes(q)) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.created_at || 0).getTime();
+        const timeB = new Date(b.timestamp || b.created_at || 0).getTime();
+        if (sortBy === "newest") return timeB - timeA;
+        if (sortBy === "oldest") return timeA - timeB;
+        if (sortBy === "conf_desc") return (b.confidence || 0) - (a.confidence || 0);
+        if (sortBy === "conf_asc") return (a.confidence || 0) - (b.confidence || 0);
+        return 0;
+      });
+  }, [allLogs, filter, cameraFilter, minConfFilter, searchQuery, sortBy]);
+
+  // Kanban groups
+  const kanbanGroups = useMemo(() => {
+    const high = filteredAndSortedLogs.filter(l => l.person_name !== "Unknown" && l.confidence >= 0.7);
+    const medium = filteredAndSortedLogs.filter(l => l.person_name !== "Unknown" && l.confidence >= 0.5 && l.confidence < 0.7);
+    const low = filteredAndSortedLogs.filter(l => l.person_name !== "Unknown" && l.confidence < 0.5);
+    const unknown = filteredAndSortedLogs.filter(l => l.person_name === "Unknown");
+    return [
+      { id: "high", title: "High Match (≥70%)", color: "#059669", bg: "rgba(16,185,129,0.06)", border: "#10b981", items: high },
+      { id: "medium", title: "Medium Match (50-69%)", color: "#2563eb", bg: "rgba(37,99,235,0.06)", border: "#3b82f6", items: medium },
+      { id: "low", title: "Low Match (<50%)", color: "#d97706", bg: "rgba(217,119,6,0.06)", border: "#f59e0b", items: low },
+      { id: "unknown", title: "Security Alerts (Unknown)", color: "#dc2626", bg: "rgba(220,38,38,0.06)", border: "#ef4444", items: unknown },
+    ];
+  }, [filteredAndSortedLogs]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAndSortedLogs.length / pageSize) || 1;
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedLogs.slice(start, start + pageSize);
+  }, [filteredAndSortedLogs, currentPage, pageSize]);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: "#ef444415", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round">
-            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-          </svg>
+    <div style={{ color: "#0f172a" }}>
+      {/* 1. Header Banner & View Switcher */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg, #ef444420, #dc262630)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(239,68,68,0.3)" }}>
+            <ShieldAlert size={20} color="#ef4444" />
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 800, fontSize: 17, color: "#0f172a", letterSpacing: "-0.01em" }}>Database Detection Logs</span>
+              <span style={{
+                fontSize: 10, color: "#10b981", fontWeight: 700, background: "rgba(16,185,129,0.1)",
+                padding: "2px 8px", borderRadius: 10, border: "1px solid rgba(16,185,129,0.3)",
+                display: "inline-flex", alignItems: "center", gap: 4
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981", animation: "pulse 2s infinite" }} />
+                Realtime Sync
+              </span>
+            </div>
+            <p style={{ fontSize: 11, color: "#64748b", margin: "2px 0 0 0" }}>
+              Live Supabase database records • {allLogs.length} total entries indexed
+            </p>
+          </div>
         </div>
-        <span style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>Detection Log</span>
-        <button onClick={() => fetchFilteredLogs(filter)} style={{
-          marginLeft: "auto", background: "none", border: "none",
-          color: "#6b7280", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", gap: 4, fontWeight: 600
-        }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M21 12a9 9 0 1 1-6.22-8.56" />
-          </svg>
-          Refresh
-        </button>
+
+        {/* Header Right Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {/* View Mode Switcher Buttons */}
+          <div style={{ display: "flex", gap: 2, background: "#e2e8f0", padding: 3, borderRadius: 9 }}>
+            {[
+              { id: "cards", label: "Cards", Icon: LayoutGrid },
+              { id: "list", label: "List", Icon: ListIcon },
+              { id: "table", label: "Table", Icon: TableIcon },
+              { id: "kanban", label: "Kanban", Icon: KanbanIcon },
+            ].map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setViewMode(id as ViewMode)}
+                style={{
+                  padding: "5px 10px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11,
+                  fontWeight: viewMode === id ? 800 : 600,
+                  background: viewMode === id ? "#ffffff" : "transparent",
+                  color: viewMode === id ? "#4f46e5" : "#475569",
+                  boxShadow: viewMode === id ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  display: "flex", alignItems: "center", gap: 5,
+                  transition: "all 0.15s"
+                }}
+              >
+                <Icon size={13} color={viewMode === id ? "#4f46e5" : "#64748b"} />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <button onClick={() => { fetchFilteredLogs(); onRefresh(); }} style={{
+            background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 8,
+            padding: "6px 12px", color: "#334155", cursor: "pointer", fontSize: 11,
+            display: "flex", alignItems: "center", gap: 6, fontWeight: 700, transition: "all 0.2s"
+          }}>
+            <RefreshCw size={12} color="#475569" />
+            Refresh
+          </button>
+
+          <button onClick={handleExportCSV} title="Export currently displayed database logs as CSV" style={{
+            background: "linear-gradient(135deg, #6366f1, #4f46e5)", border: "none", borderRadius: 8,
+            padding: "6px 12px", color: "#ffffff", cursor: "pointer", fontSize: 11,
+            display: "flex", alignItems: "center", gap: 6, fontWeight: 700, boxShadow: "0 2px 6px rgba(79,70,229,0.3)",
+            transition: "all 0.2s"
+          }}>
+            <Download size={12} color="#ffffff" />
+            Export CSV ({filteredAndSortedLogs.length})
+          </button>
+        </div>
       </div>
 
-      {/* Stats row */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <div style={{ flex: 1, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 8, padding: "6px 10px", textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#059669", fontFamily: "'JetBrains Mono',monospace" }}>{knownCount}</div>
-          <div style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", fontWeight: 700 }}>Matched</div>
+      {/* 2. KPI Summary Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 16 }}>
+        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
+            <Database size={11} color="#64748b" />
+            Total Logged
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{allLogs.length}</div>
         </div>
-        <div style={{ flex: 1, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "6px 10px", textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#dc2626", fontFamily: "'JetBrains Mono',monospace" }}>{unknownCount}</div>
-          <div style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", fontWeight: 700 }}>Unknown</div>
+        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(16,185,129,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <div style={{ fontSize: 10, color: "#059669", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
+            <UserCheck size={11} color="#059669" />
+            Identified (Known)
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#059669", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
+            {knownCount} <span style={{ fontSize: 11, fontWeight: 600, color: "#10b981" }}>({allLogs.length ? Math.round((knownCount/allLogs.length)*100) : 0}%)</span>
+          </div>
         </div>
-        <button
-          onClick={handleDeleteUnknown}
-          disabled={isDeleting || unknownCount === 0}
-          title="Delete all unknown logs"
+        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(245,158,11,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <div style={{ fontSize: 10, color: "#d97706", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
+            <Users size={11} color="#d97706" />
+            Visitor Detections
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#d97706", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
+            {visitorCount} <span style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b" }}>({allLogs.length ? Math.round((visitorCount/allLogs.length)*100) : 0}%)</span>
+          </div>
+        </div>
+        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <div style={{ fontSize: 10, color: "#dc2626", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
+            <AlertTriangle size={11} color="#dc2626" />
+            Security Alerts
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#dc2626", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{unknownCount}</div>
+        </div>
+        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(99,102,241,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+          <div style={{ fontSize: 10, color: "#4f46e5", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
+            <TrendingUp size={11} color="#4f46e5" />
+            Avg Confidence
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#4f46e5", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{avgConfidence}%</div>
+        </div>
+      </div>
+
+      {/* 3. Search Bar */}
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#94a3b8" }}>
+          <Search size={15} color="#94a3b8" />
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search logs by name, camera, location, department, or employee code..."
           style={{
-            background: unknownCount > 0 ? "rgba(239,68,68,0.1)" : "#f3f4f6",
-            border: `1px solid ${unknownCount > 0 ? "rgba(239,68,68,0.3)" : "#e5e7eb"}`,
-            borderRadius: 8, padding: "6px 10px", cursor: unknownCount > 0 ? "pointer" : "not-allowed",
-            color: unknownCount > 0 ? "#dc2626" : "#9ca3af",
-            fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
-            transition: "all 0.2s",
+            width: "100%", padding: "9px 36px 9px 36px", borderRadius: 10,
+            border: "1.5px solid #cbd5e1", background: "#ffffff", fontSize: 12.5,
+            color: "#0f172a", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+            transition: "all 0.2s"
           }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" />
-          </svg>
-          {deleteMsg || "Clear"}
-        </button>
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            style={{
+              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+              background: "#e2e8f0", border: "none", borderRadius: "50%", width: 18, height: 18,
+              cursor: "pointer", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center"
+            }}
+          >
+            <X size={11} color="#475569" />
+          </button>
+        )}
       </div>
 
-      {/* Filter tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#f3f4f6", borderRadius: 8, padding: 3 }}>
-        {(["all", "matched", "unknown"] as FilterTab[]).map(tab => (
+      {/* 4. Controls & Filters Bar */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+        {/* Filter Tabs */}
+        <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 8, padding: 3 }}>
+          {(["all", "matched", "unknown", "high", "visitors"] as FilterTab[]).map(tab => (
+            <button
+               key={tab}
+               onClick={() => setFilter(tab)}
+               style={{
+                 padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11,
+                 fontWeight: filter === tab ? 700 : 600,
+                 background: filter === tab ? "#ffffff" : "transparent",
+                 color: filter === tab
+                   ? tab === "matched" ? "#059669"
+                     : tab === "unknown" ? "#dc2626"
+                     : tab === "high" ? "#4f46e5"
+                     : tab === "visitors" ? "#d97706"
+                     : "#0f172a"
+                   : "#64748b",
+                 boxShadow: filter === tab ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                 transition: "all 0.15s",
+               }}
+             >
+               {tab === "all" ? `All (${allLogs.length})`
+                 : tab === "matched" ? `Known (${knownCount})`
+                 : tab === "unknown" ? `Unknown (${unknownCount})`
+                 : tab === "high" ? `High Match (${highMatchCount})`
+                 : `Visitors (${visitorCount})`}
+            </button>
+          ))}
+        </div>
+
+        {/* Dropdowns & Actions */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {/* Camera Filter Dropdown */}
+          {cameras.length > 0 && (
+            <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+              <select
+                value={cameraFilter}
+                onChange={e => setCameraFilter(e.target.value)}
+                style={{
+                  padding: "5.5px 10px 5.5px 28px", fontSize: 11, fontWeight: 650,
+                  borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff",
+                  color: "#334155", outline: "none", cursor: "pointer"
+                }}
+              >
+                <option value="all">All Cameras ({cameras.length})</option>
+                {cameras.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.place})
+                  </option>
+                ))}
+              </select>
+              <Camera size={12} color="#64748b" style={{ position: "absolute", left: 9, pointerEvents: "none" }} />
+            </div>
+          )}
+
+          {/* Min Confidence Dropdown */}
+          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+            <select
+              value={minConfFilter}
+              onChange={e => setMinConfFilter(Number(e.target.value))}
+              style={{
+                padding: "5.5px 10px 5.5px 28px", fontSize: 11, fontWeight: 650,
+                borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff",
+                color: "#334155", outline: "none", cursor: "pointer"
+              }}
+            >
+              <option value={0}>Any Confidence</option>
+              <option value={0.5}>≥ 50% Confidence</option>
+              <option value={0.7}>≥ 70% Confidence</option>
+              <option value={0.85}>≥ 85% Confidence</option>
+            </select>
+            <SlidersHorizontal size={12} color="#64748b" style={{ position: "absolute", left: 9, pointerEvents: "none" }} />
+          </div>
+
+          {/* Sort Dropdown */}
+          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as SortOption)}
+              style={{
+                padding: "5.5px 10px 5.5px 28px", fontSize: 11, fontWeight: 650,
+                borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff",
+                color: "#334155", outline: "none", cursor: "pointer"
+              }}
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="conf_desc">Highest Confidence</option>
+              <option value="conf_asc">Lowest Confidence</option>
+            </select>
+            <ArrowUpDown size={12} color="#64748b" style={{ position: "absolute", left: 9, pointerEvents: "none" }} />
+          </div>
+
+          {/* Clear Unknowns button */}
           <button
-            key={tab}
-            onClick={() => setFilter(tab)}
+            onClick={handleDeleteUnknown}
+            disabled={isDeleting || unknownCount === 0}
+            title="Delete all unknown logs from database"
             style={{
-              flex: 1, padding: "5px 0", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5,
-              fontWeight: filter === tab ? 700 : 500, letterSpacing: "0.02em",
-              background: filter === tab ? "#ffffff" : "transparent",
-              color: filter === tab
-                ? tab === "matched" ? "#059669"
-                  : tab === "unknown" ? "#dc2626"
-                  : "#111827"
-                : "#6b7280",
-              boxShadow: filter === tab ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
+              background: unknownCount > 0 ? "rgba(239,68,68,0.1)" : "#f1f5f9",
+              border: `1px solid ${unknownCount > 0 ? "rgba(239,68,68,0.3)" : "#cbd5e1"}`,
+              borderRadius: 8, padding: "5.5px 10px", cursor: unknownCount > 0 ? "pointer" : "not-allowed",
+              color: unknownCount > 0 ? "#dc2626" : "#94a3b8",
+              fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
               transition: "all 0.2s",
             }}
           >
-            {tab === "all" ? `All (${allLogs.length})` : tab === "matched" ? `✓ Matched (${knownCount})` : `? Unknown (${unknownCount})`}
+            <Trash2 size={12} color={unknownCount > 0 ? "#dc2626" : "#94a3b8"} />
+            {deleteMsg || "Clear Unknowns"}
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* Log list */}
-      {displayed.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "28px 0", color: "#6b7280", fontSize: 12 }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"
-            style={{ margin: "0 auto 8px", display: "block" }}>
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          {filter === "all" ? "No detections yet. Enable Face Matcher to start." : `No ${filter} logs.`}
-        </div>
-      ) : (
-        <div style={{ maxHeight: 480, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-          {displayed.map(log => {
-            const isKnown = log.person_name !== "Unknown";
-            const ts = log.created_at || (log as any).timestamp;
-            const pct = Math.round(log.confidence * 100);
-            const top3: Top3Candidate[] = (log as any).top3 || [];
+      {/* Search results summary count */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, fontSize: 11, color: "#64748b" }}>
+        <span>
+          Showing <strong>{filteredAndSortedLogs.length}</strong> of <strong>{allLogs.length}</strong> database logs
+          {searchQuery && ` matching "${searchQuery}"`}
+        </span>
+        {viewMode !== "kanban" && filteredAndSortedLogs.length > 0 && (
+          <span>Page {currentPage} of {totalPages}</span>
+        )}
+      </div>
 
-            const statusColor = isKnown
-              ? pct >= 70 ? "#059669" : pct >= 50 ? "#0284c7" : "#d97706"
-              : "#dc2626";
+      {/* 5. Main Content Display across 4 View Modes */}
+      {filteredAndSortedLogs.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 16px", background: "#f8fafc", borderRadius: 12, border: "1.5px dashed #cbd5e1", color: "#64748b", fontSize: 12 }}>
+          <AlertTriangle size={32} color="#94a3b8" style={{ margin: "0 auto 8px", display: "block" }} />
+          <div style={{ fontWeight: 700, color: "#334155", fontSize: 13, marginBottom: 4 }}>No matching logs found</div>
+          {searchQuery ? "Try clearing your search query or adjusting your filters." : "No face detection logs recorded in the database yet."}
+        </div>
+      ) : viewMode === "cards" ? (
+        /* MODE 1: CARDS GRID VIEW */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+          {paginatedLogs.map(log => {
+            const isKnown = log.person_name !== "Unknown";
+            const ts = log.timestamp || log.created_at;
+            const pct = Math.round(log.confidence * 100);
+            const statusColor = isKnown ? (pct >= 70 ? "#059669" : pct >= 50 ? "#2563eb" : "#d97706") : "#dc2626";
+            const registeredPhoto = log.registered_photo || faces.find(f => f.name.toLowerCase() === log.person_name.toLowerCase())?.photo_url;
 
             return (
               <div key={log.id} style={{
-                background: "#ffffff",
-                border: `1px solid ${isKnown ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
-                borderRadius: 12, padding: "10px 12px",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-                animation: "fadeInUp 0.3s ease",
+                background: "#ffffff", borderRadius: 14, padding: 14,
+                border: `1.5px solid ${isKnown ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", gap: 10,
+                transition: "transform 0.2s, box-shadow 0.2s"
               }}>
-                {/* Row 1: name + time */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                {/* Header: Name + Badge */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{
-                      width: 6, height: 6, borderRadius: "50%", background: statusColor,
-                    }} />
-                    <span style={{ fontWeight: 700, fontSize: 12, color: statusColor }}>
-                      {isKnown ? log.person_name : "Unknown Person"}
-                    </span>
-                    {!isKnown && (
-                      <span style={{
-                        fontSize: 8.5, fontWeight: 700, color: "#dc2626",
-                        background: "rgba(239,68,68,0.08)", padding: "1px 5px", borderRadius: 3,
-                        border: "1px solid rgba(239,68,68,0.2)", textTransform: "uppercase",
-                      }}>
-                        Unidentified
-                      </span>
-                    )}
-                    {isKnown && pct >= 70 && (
-                      <span style={{
-                        fontSize: 8.5, fontWeight: 700, color: "#059669",
-                        background: "rgba(16,185,129,0.08)", padding: "1px 5px", borderRadius: 3,
-                        border: "1px solid rgba(16,185,129,0.2)", textTransform: "uppercase",
-                      }}>
-                        High Confidence
-                      </span>
-                    )}
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
+                    <span style={{ fontWeight: 800, fontSize: 14, color: statusColor }}>{isKnown ? log.person_name : "Unknown Person"}</span>
                   </div>
-                  <span style={{ fontSize: 9.5, color: "#6b7280", flexShrink: 0, fontWeight: 500 }}>{timeAgo(ts)}</span>
+                  <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
+                    <Clock size={10} color="#64748b" />
+                    {timeAgo(ts)}
+                  </span>
                 </div>
 
-                {/* Row 2: images side-by-side */}
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  {/* Live crop */}
-                  <div style={{ flexShrink: 0 }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 8, overflow: "hidden", border: `2px solid ${statusColor}`, position: "relative" }}>
-                      {log.snapshot_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : (
-                        <div style={{ width: "100%", height: "100%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
-                            <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <span style={{ fontSize: 7.5, color: "#6b7280", fontWeight: 700, display: "block", textAlign: "center", marginTop: 2, textTransform: "uppercase" }}>
-                      Live
-                    </span>
+                {/* Photos Side by Side */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", padding: 8, borderRadius: 10, border: "1px solid #e2e8f0" }}>
+                  <div style={{ width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `2px solid ${statusColor}`, flexShrink: 0, position: "relative" }}>
+                    {log.snapshot_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "100%", height: "100%", background: "#e2e8f0" }} />
+                    )}
+                    <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7, textAlign: "center", fontWeight: 800 }}>LIVE</span>
                   </div>
 
-                  {/* Arrow */}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 52, gap: 3, flexShrink: 0 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={statusColor} strokeWidth="2">
-                      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-                    </svg>
-                    <span style={{
-                      fontSize: 7.5, fontWeight: 700, textTransform: "uppercase",
-                      color: isKnown ? "#059669" : "#dc2626",
-                      background: isKnown ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
-                      padding: "1px 4px", borderRadius: 3,
-                    }}>
-                      {isKnown ? "MATCH" : "NONE"}
-                    </span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <ArrowRight size={14} color={statusColor} />
                   </div>
 
-                  {/* Enrolled / candidates */}
+                  <div style={{ width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `2px solid ${isKnown ? "#6366f1" : "#cbd5e1"}`, flexShrink: 0, position: "relative" }}>
+                    {registeredPhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={registeredPhoto} alt="Ref" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "100%", height: "100%", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#64748b", textAlign: "center" }}>No Photo</div>
+                    )}
+                    <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7, textAlign: "center", fontWeight: 800 }}>REF</span>
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 9, color: "#4f46e5", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
+                      <Camera size={9} color="#4f46e5" />
+                      {log.camera_name || "Camera"}
+                    </span>
+                    <span style={{ fontSize: 9, color: "#64748b", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.camera_location || "Zone A"}</span>
+                    {log.department && (
+                      <span style={{ fontSize: 8.5, color: "#334155", background: "#e2e8f0", padding: "1px 4px", borderRadius: 4, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <Building2 size={8} color="#334155" />
+                        {log.department}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Confidence */}
+                <ConfidenceMeter value={log.confidence} color={statusColor} />
+
+                {/* Footer Action */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <span style={{ fontSize: 9, color: "#64748b" }}>ID: {log.id.slice(0, 8)}...</span>
+                  <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                    <Maximize2 size={11} color="#334155" />
+                    Inspect
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : viewMode === "list" ? (
+        /* MODE 2: EXPANDED LIST VIEW */
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {paginatedLogs.map(log => {
+            const isKnown = log.person_name !== "Unknown";
+            const ts = log.timestamp || log.created_at;
+            const pct = Math.round(log.confidence * 100);
+            const top3: Top3Candidate[] = log.top3 || [];
+            const statusColor = isKnown ? (pct >= 70 ? "#059669" : pct >= 50 ? "#2563eb" : "#d97706") : "#dc2626";
+
+            return (
+              <div key={log.id} style={{
+                background: "#ffffff", borderRadius: 12, padding: "12px 14px",
+                border: `1.5px solid ${isKnown ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.03)", transition: "all 0.2s"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
+                    <span style={{ fontWeight: 800, fontSize: 14, color: statusColor }}>{isKnown ? log.person_name : "Unknown Person"}</span>
+                    <span style={{ fontSize: 9.5, fontWeight: 700, color: "#4f46e5", background: "rgba(99,102,241,0.08)", padding: "3px 8px", borderRadius: 8, border: "1px solid rgba(99,102,241,0.2)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Camera size={10} color="#4f46e5" />
+                      {log.camera_name || "Main Camera"} {log.camera_location && `• ${log.camera_location}`}
+                    </span>
+                    {log.department && (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", background: "#f1f5f9", padding: "2px 6px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <Building2 size={9} color="#475569" />
+                        {log.department}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <Clock size={10} color="#64748b" />
+                      {timeAgo(ts)}
+                    </span>
+                    <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Maximize2 size={11} color="#334155" />
+                      Inspect
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: `2px solid ${statusColor}`, flexShrink: 0 }}>
+                    {log.snapshot_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <div style={{ width: "100%", height: "100%", background: "#f1f5f9" }} />
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                    <ArrowRight size={18} color={statusColor} />
+                    <span style={{ fontSize: 7.5, fontWeight: 800, color: isKnown ? "#059669" : "#dc2626" }}>{isKnown ? "MATCH" : "NO MATCH"}</span>
+                  </div>
+
                   <div style={{ flex: 1 }}>
                     {isKnown ? (
                       (() => {
-                        const enrolled = faces.find(f => f.name.toLowerCase() === log.person_name.toLowerCase());
-                        return enrolled?.photo_url ? (
-                          <div>
-                            <div style={{ width: 52, height: 52, borderRadius: 8, overflow: "hidden", border: "2px solid #6366f1" }}>
+                        const registeredPhoto = log.registered_photo || faces.find(f => f.name.toLowerCase() === log.person_name.toLowerCase())?.photo_url;
+                        return registeredPhoto ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: "2px solid #6366f1", flexShrink: 0 }}>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={enrolled.photo_url} alt={enrolled.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              <img src={registeredPhoto} alt={log.person_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             </div>
-                            <span style={{ fontSize: 7.5, color: "#4f46e5", fontWeight: 700, display: "block", textAlign: "center", marginTop: 2, textTransform: "uppercase" }}>
-                              Enrolled
-                            </span>
+                            <div>
+                              <span style={{ fontSize: 8, color: "#4f46e5", fontWeight: 800, textTransform: "uppercase" }}>Enrolled Record</span>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>{log.person_name}</div>
+                              {log.employee_code && <div style={{ fontSize: 9.5, color: "#64748b", fontFamily: "'JetBrains Mono', monospace" }}>ID: {log.employee_code}</div>}
+                            </div>
                           </div>
                         ) : (
-                          <div style={{ width: 52, height: 52, borderRadius: 8, border: "2px dashed #d1d5db", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ fontSize: 8.5, color: "#6b7280" }}>No photo</span>
-                          </div>
+                          <div style={{ fontSize: 11, color: "#64748b" }}>Matched gallery record: <strong>{log.person_name}</strong></div>
                         );
                       })()
                     ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <div style={{
-                          padding: "4px 6px", background: "rgba(239,68,68,0.06)",
-                          border: "1px dashed rgba(239,68,68,0.2)", borderRadius: 6,
-                          fontSize: 8.5, color: "#dc2626", fontWeight: 600
-                        }}>
-                          No match found in gallery
-                        </div>
+                      <div style={{ fontSize: 11, color: "#dc2626", fontWeight: 600, background: "rgba(239,68,68,0.05)", padding: "8px 12px", borderRadius: 8, border: "1px dashed rgba(239,68,68,0.2)", display: "flex", alignItems: "center", gap: 6 }}>
+                        <AlertTriangle size={14} color="#dc2626" />
+                        Face embedding did not exceed threshold. Logged as unknown alert.
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Confidence meter */}
                 <ConfidenceMeter value={log.confidence} color={statusColor} />
-
-                {/* Top-3 candidates for unknowns */}
-                {!isKnown && top3.length > 0 && (
-                  <Top3Comparison candidates={top3} faces={faces} />
-                )}
-
-                {/* Det score footnote */}
-                {(log as any).det_score !== undefined && (
-                  <div style={{ marginTop: 6, fontSize: 8.5, color: "#9ca3af", fontWeight: 500 }}>
-                    Detection confidence: {Math.round(((log as any).det_score || 0) * 100)}%
-                  </div>
-                )}
+                {!isKnown && top3.length > 0 && <Top3Comparison candidates={top3} faces={faces} />}
               </div>
             );
           })}
         </div>
+      ) : viewMode === "table" ? (
+        /* MODE 3: HIGH-DENSITY TABULAR DATA TABLE VIEW */
+        <div style={{ background: "#ffffff", borderRadius: 12, border: "1px solid #cbd5e1", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 11.5 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #cbd5e1", color: "#475569", fontWeight: 700, textTransform: "uppercase", fontSize: 9.5, letterSpacing: "0.04em" }}>
+                <th style={{ padding: "10px 12px" }}>Face Crop</th>
+                <th style={{ padding: "10px 12px" }}>Person Name & ID</th>
+                <th style={{ padding: "10px 12px" }}>Status</th>
+                <th style={{ padding: "10px 12px" }}>Confidence</th>
+                <th style={{ padding: "10px 12px" }}>Camera / Location</th>
+                <th style={{ padding: "10px 12px" }}>Timestamp</th>
+                <th style={{ padding: "10px 12px", textAlign: "right" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedLogs.map((log, idx) => {
+                const isKnown = log.person_name !== "Unknown";
+                const ts = log.timestamp || log.created_at;
+                const pct = Math.round(log.confidence * 100);
+                const statusColor = isKnown ? (pct >= 70 ? "#059669" : pct >= 50 ? "#2563eb" : "#d97706") : "#dc2626";
+
+                return (
+                  <tr key={log.id} style={{ borderBottom: "1px solid #e2e8f0", background: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 8, overflow: "hidden", border: `1.5px solid ${statusColor}` }}>
+                        {log.snapshot_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={log.snapshot_url} alt="Crop" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", background: "#e2e8f0" }} />
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div style={{ fontWeight: 800, color: statusColor, fontSize: 12 }}>{isKnown ? log.person_name : "Unknown Person"}</div>
+                      {log.employee_code && <div style={{ fontSize: 9.5, color: "#64748b", fontFamily: "'JetBrains Mono', monospace" }}>ID: {log.employee_code}</div>}
+                      {log.department && <div style={{ fontSize: 9, color: "#475569" }}>{log.department}</div>}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <span style={{
+                        fontSize: 9.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
+                        color: statusColor, background: isKnown ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+                        border: `1px solid ${statusColor}30`, display: "inline-flex", alignItems: "center", gap: 4
+                      }}>
+                        {isKnown ? <UserCheck size={11} color={statusColor} /> : <UserX size={11} color={statusColor} />}
+                        {isKnown ? (pct >= 70 ? "HIGH MATCH" : "MATCHED") : "UNKNOWN ALERT"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "8px 12px", width: 140 }}>
+                      <div style={{ fontWeight: 700, color: statusColor, fontFamily: "'JetBrains Mono', monospace" }}>{pct}%</div>
+                      <div style={{ height: 4, background: "#e5e7eb", borderRadius: 2, marginTop: 3 }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: statusColor, borderRadius: 2 }} />
+                      </div>
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div style={{ fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: 4 }}>
+                        <Camera size={11} color="#64748b" />
+                        {log.camera_name || "Main Camera"}
+                      </div>
+                      <div style={{ fontSize: 9.5, color: "#64748b" }}>{log.camera_location || "Zone A"}</div>
+                    </td>
+                    <td style={{ padding: "8px 12px", fontFamily: "'JetBrains Mono', monospace", color: "#475569" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <Clock size={10} color="#64748b" />
+                        {timeAgo(ts)}
+                      </div>
+                      <div style={{ fontSize: 9, color: "#94a3b8" }}>{formatDate(ts)}</div>
+                    </td>
+                    <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                      <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Maximize2 size={11} color="#334155" />
+                        Inspect
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* MODE 4: KANBAN BOARD VIEW */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+          {kanbanGroups.map(col => (
+            <div key={col.id} style={{
+              background: "#ffffff", borderRadius: 14, border: `1.5px solid ${col.border}`,
+              overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: 600
+            }}>
+              {/* Kanban Column Header */}
+              <div style={{ background: col.bg, padding: "10px 12px", borderBottom: `1.5px solid ${col.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontWeight: 800, fontSize: 12, color: col.color, display: "flex", alignItems: "center", gap: 5 }}>
+                  {col.id === "high" && <Sparkles size={13} color={col.color} />}
+                  {col.id === "medium" && <UserCheck size={13} color={col.color} />}
+                  {col.id === "low" && <User size={13} color={col.color} />}
+                  {col.id === "unknown" && <ShieldAlert size={13} color={col.color} />}
+                  {col.title}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 800, background: col.color, color: "#ffffff", padding: "1px 7px", borderRadius: 10 }}>
+                  {col.items.length}
+                </span>
+              </div>
+
+              {/* Column Items Scrollable */}
+              <div style={{ padding: 10, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+                {col.items.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "20px 0", color: "#94a3b8", fontSize: 11 }}>No items in lane</div>
+                ) : (
+                  col.items.map(log => {
+                    const ts = log.timestamp || log.created_at;
+                    return (
+                      <div key={log.id} style={{
+                        background: "#ffffff", borderRadius: 10, padding: 10,
+                        border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+                      }}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", border: `1.5px solid ${col.color}`, flexShrink: 0 }}>
+                            {log.snapshot_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ) : (
+                              <div style={{ width: "100%", height: "100%", background: "#e2e8f0" }} />
+                            )}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, fontSize: 12, color: col.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {log.person_name}
+                            </div>
+                            <div style={{ fontSize: 9.5, color: "#64748b", display: "flex", alignItems: "center", gap: 3 }}>
+                              <Camera size={10} color="#64748b" />
+                              {log.camera_name || "Camera"}
+                            </div>
+                            <div style={{ fontSize: 9, color: "#94a3b8", fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 3 }}>
+                              <Clock size={9} color="#94a3b8" />
+                              {timeAgo(ts)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <ConfidenceMeter value={log.confidence} color={col.color} />
+
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                          <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 5, padding: "2px 8px", fontSize: 9.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            <Maximize2 size={10} color="#334155" />
+                            Inspect
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
+      {/* 6. Pagination Controls Footer (for Cards, List, Table views) */}
+      {viewMode !== "kanban" && filteredAndSortedLogs.length > pageSize && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, paddingTop: 12, borderTop: "1px solid #e2e8f0", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
+            <span>Per page:</span>
+            <select
+              value={pageSize}
+              onChange={e => setPageSize(Number(e.target.value))}
+              style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11 }}
+            >
+              <option value={12}>12</option>
+              <option value={24}>24</option>
+              <option value={48}>48</option>
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={{
+                padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1",
+                background: currentPage === 1 ? "#f1f5f9" : "#ffffff",
+                color: currentPage === 1 ? "#94a3b8" : "#334155",
+                cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700,
+                display: "inline-flex", alignItems: "center", gap: 4
+              }}
+            >
+              <ChevronLeft size={12} />
+              Previous
+            </button>
+            <span style={{ fontSize: 11, color: "#334155", fontWeight: 700, padding: "0 6px" }}>
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              style={{
+                padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1",
+                background: currentPage === totalPages ? "#f1f5f9" : "#ffffff",
+                color: currentPage === totalPages ? "#94a3b8" : "#334155",
+                cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700,
+                display: "inline-flex", alignItems: "center", gap: 4
+              }}
+            >
+              Next
+              <ChevronRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Deep Log Inspection Modal */}
+      {selectedLog && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(15,23,42,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 9999, padding: 20
+        }}
+        onClick={() => setSelectedLog(null)}
+        >
+          <div style={{
+            background: "#ffffff", borderRadius: 16, width: "100%", maxWidth: 560,
+            maxHeight: "90vh", overflowY: "auto", padding: 24, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)"
+          }}
+          onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <ShieldAlert size={20} color="#0f172a" />
+                <span style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>Database Log Record</span>
+                <span style={{
+                  fontSize: 10, fontWeight: 700,
+                  color: selectedLog.person_name !== "Unknown" ? "#059669" : "#dc2626",
+                  background: selectedLog.person_name !== "Unknown" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+                  padding: "2px 8px", borderRadius: 10
+                }}>
+                  {selectedLog.person_name !== "Unknown" ? "MATCHED" : "UNKNOWN"}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedLog(null)}
+                style={{ background: "#f1f5f9", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <X size={14} color="#64748b" />
+              </button>
+            </div>
+
+            {/* Images side-by-side enlarged */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, background: "#f8fafc", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+              <div>
+                <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+                  Live Snapshot Crop
+                </span>
+                {selectedLog.snapshot_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={selectedLog.snapshot_url} alt="Live" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, border: "2px solid #cbd5e1" }} />
+                ) : (
+                  <div style={{ width: "100%", height: 140, borderRadius: 8, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 11 }}>No Live Crop</div>
+                )}
+              </div>
+
+              <div>
+                <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+                  Enrolled Gallery Reference
+                </span>
+                {selectedLog.registered_photo || faces.find(f => f.name.toLowerCase() === selectedLog.person_name.toLowerCase())?.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={selectedLog.registered_photo || faces.find(f => f.name.toLowerCase() === selectedLog.person_name.toLowerCase())?.photo_url} alt="Enrolled" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, border: "2px solid #6366f1" }} />
+                ) : (
+                  <div style={{ width: "100%", height: 140, borderRadius: 8, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 11 }}>No Enrolled Photo</div>
+                )}
+              </div>
+            </div>
+
+            {/* Field Details Table */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
+                <span style={{ color: "#64748b", fontWeight: 600 }}>Log Database ID:</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "#0f172a" }}>{selectedLog.id}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
+                <span style={{ color: "#64748b", fontWeight: 600 }}>Person Name:</span>
+                <span style={{ fontWeight: 800, color: selectedLog.person_name !== "Unknown" ? "#059669" : "#dc2626" }}>{selectedLog.person_name}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
+                <span style={{ color: "#64748b", fontWeight: 600 }}>Match Confidence:</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: "#4f46e5" }}>{Math.round(selectedLog.confidence * 100)}% ({selectedLog.confidence.toFixed(4)})</span>
+              </div>
+              {selectedLog.det_score !== undefined && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
+                  <span style={{ color: "#64748b", fontWeight: 600 }}>YOLO / InsightFace Det Score:</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{Math.round(selectedLog.det_score * 100)}%</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
+                <span style={{ color: "#64748b", fontWeight: 600 }}>Camera Name / Location:</span>
+                <span style={{ fontWeight: 700, color: "#0f172a" }}>{selectedLog.camera_name} ({selectedLog.camera_location})</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
+                <span style={{ color: "#64748b", fontWeight: 600 }}>Exact Supabase Timestamp:</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#334155" }}>{formatDate(selectedLog.timestamp || selectedLog.created_at)}</span>
+              </div>
+              {selectedLog.department && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
+                  <span style={{ color: "#64748b", fontWeight: 600 }}>Department / Group:</span>
+                  <span style={{ fontWeight: 700, color: "#334155" }}>{selectedLog.department}</span>
+                </div>
+              )}
+              {selectedLog.employee_code && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
+                  <span style={{ color: "#64748b", fontWeight: 600 }}>Employee / Person ID:</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "#334155" }}>{selectedLog.employee_code}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => copyToClipboard(selectedLog.id, "id")}
+                style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+              >
+                {copiedField === "id" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
+                {copiedField === "id" ? "Copied ID!" : "Copy Log ID"}
+              </button>
+              {selectedLog.snapshot_url && (
+                <button
+                  onClick={() => copyToClipboard(selectedLog.snapshot_url!, "url")}
+                  style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  {copiedField === "url" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
+                  {copiedField === "url" ? "Copied Link!" : "Copy Snapshot Link"}
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedLog(null)}
+                style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pulse keyframe styling */}
       <style>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(1.2); }
         }
       `}</style>
     </div>

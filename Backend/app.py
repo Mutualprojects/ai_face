@@ -78,6 +78,13 @@ class Config:
     GO2RTC_RTSP_PORT = int(os.getenv("GO2RTC_RTSP_PORT", "8554"))
     WS_PORT = int(os.getenv("WS_PORT", "5001"))
 
+    # ── DEVICE CAMERAS ──────────────────────────────────────
+    # Off by default: local webcams (/dev/videoX) must never be pulled
+    # into the detection pipeline unless explicitly enabled. Prevents a
+    # stale `device:0` camera row in the DB from silently capturing the
+    # host laptop/webcam.
+    ALLOW_DEVICE_CAMERAS = os.getenv("ALLOW_DEVICE_CAMERAS", "false").lower() == "true"
+
     # ── AUTH ──────────────────────────────────────────────
     # Previously every endpoint — including registering/deleting people
     # and adding/removing cameras — was wide open with no auth at all.
@@ -172,6 +179,8 @@ def require_api_key(fn):
             return fn(*args, **kwargs)
         header = request.headers.get("Authorization", "")
         token = header[7:] if header.startswith("Bearer ") else None
+        if not token:
+            token = request.headers.get("x-api-key", "")
         if token != Config.API_KEY:
             return jsonify({"error": "Unauthorized"}), 401
         return fn(*args, **kwargs)
@@ -1001,6 +1010,7 @@ def log_match(camera_id: str, name: str, confidence: float, crop_b64: str, perso
             "confidence": round(confidence, 4),
             "snapshot_url": crop_b64,
             "timestamp": created_at,
+            "camera_id": camera_id
         }
         supabase.table("face_logs").insert(payload).execute()
         log.info("[Logger %s] Logged event: %s (person_id=%s, conf=%.2f)", camera_id, name, person_id, confidence)
@@ -1050,8 +1060,8 @@ def worker_log_match(camera_id: str, name: str, confidence: float, crop_b64: str
                 "person_id": person_id,
                 "person_name": name,
                 "confidence": round(confidence, 4),
-                "snapshot_url": crop_b64
-                # "camera_id": camera_id  # Removed to fix PGRST204 schema cache error
+                "snapshot_url": crop_b64,
+                "camera_id": camera_id
             }
             supabase.table("face_logs").insert(payload).execute()
             log.info("[Async Logger %s] Logged face: %s (person_id=%s, conf=%.2f)", camera_id, name, person_id, confidence)
@@ -1201,6 +1211,7 @@ class CameraWorker:
             with LATEST_DETECTIONS_LOCK:
                 LATEST_DETECTIONS[self.camera_id] = {
                     "detections": detections, "timestamp": time.time(), "bodies": bodies,
+                    "frame_width": target_w, "frame_height": int(h * target_w / w),
                 }
         except Exception as e:
             log.error("[Worker %s] Frame error: %s", self.camera_id, e)
@@ -1231,6 +1242,13 @@ def start_all_workers():
                             src_type = "rtsp"
 
                     if src_type == "device":
+                        if not Config.ALLOW_DEVICE_CAMERAS:
+                            log.warning(
+                                "[Workers] Skipping '%s' — local device cameras are disabled "
+                                "(set ALLOW_DEVICE_CAMERAS=true to enable).",
+                                cam_id,
+                            )
+                            continue
                         w = CameraWorker(cam_id, source_type="device", device_index=dev_idx if dev_idx is not None else 0)
                     else:
                         w = CameraWorker(cam_id, source_type="rtsp")
@@ -1399,9 +1417,12 @@ def get_detections(camera_id):
     any_matched = any(d["matched"] for d in dets)
     best = max(dets, key=lambda d: d["confidence"]) if dets else None
     return jsonify({
-        "camera_id": camera_id, "detections": dets, "matched": any_matched,
+        "camera_id": camera_id, "detections": dets, "bodies": result.get("bodies", []),
+        "matched": any_matched,
         "name": best["name"] if best and best["matched"] else None,
         "confidence": best["confidence"] if best else 0.0,
+        "frame_width": result.get("frame_width"),
+        "frame_height": result.get("frame_height"),
         "timestamp": result.get("timestamp"),
     })
 
@@ -1426,6 +1447,8 @@ def add_camera():
         return jsonify({"error": "Missing name"}), 400
 
     if source_type == "device":
+        if not Config.ALLOW_DEVICE_CAMERAS:
+            return jsonify({"error": "Local device cameras are disabled (set ALLOW_DEVICE_CAMERAS=true to enable)."}), 400
         device_index = data.get("device_index")
         if device_index is None:
             return jsonify({"error": "Missing device_index for source_type='device'"}), 400

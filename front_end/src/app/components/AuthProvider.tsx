@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
 
-  const PUBLIC_ROUTES = ["/login", "/checkin"];
+  const PUBLIC_ROUTES = ["/login", "/checkin", "/employee-register"];
 
   useEffect(() => {
     const stored = sessionStorage.getItem("sentinel_session");

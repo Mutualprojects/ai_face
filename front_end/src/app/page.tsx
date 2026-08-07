@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { Camera, Plus, Maximize2, Columns2, Grid2x2, Grid3x3, Activity, Cctv } from "lucide-react";
 import WebRTCStream from "./components/WebRTCStream";
 import CameraModal from "./components/CameraModal";
+import LogPanel from "./components/sentinel/LogPanel";
+import GalleryPanel from "./components/sentinel/GalleryPanel";
 
 function HomeContent() {
   const [cameras, setCameras] = useState<any[]>([]);
@@ -11,6 +14,15 @@ function HomeContent() {
   const [activeCameraId, setActiveCameraId] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
   const searchParams = useSearchParams();
+  const isGridParam = searchParams.get("grid") === "true";
+  const [gridMode, setGridMode] = useState<"single" | "dual" | "quad" | "matrix">(isGridParam ? "matrix" : "single");
+
+  useEffect(() => {
+    if (searchParams.get("grid") === "true") {
+      setGridMode("matrix");
+    }
+  }, [searchParams]);
+
   const currentTab = (searchParams.get("tab") || "register") as "register" | "gallery" | "log";
 
   // Fetch which paths are READY from MediaMTX API
@@ -78,103 +90,138 @@ function HomeContent() {
 
   const showCameraSelector = cameras.length > 0;
 
+  // Determine cameras to render in grid
+  const gridCameras = useMemo(() => {
+    if (!cameras || cameras.length === 0) return [];
+    if (gridMode === "single") {
+      const selected = cameras.find(c => c.id === activeCameraId);
+      return selected ? [selected] : [cameras[0]];
+    }
+    if (gridMode === "dual") return cameras.slice(0, 2);
+    if (gridMode === "quad") return cameras.slice(0, 4);
+    return cameras; // matrix mode: all cameras
+  }, [cameras, activeCameraId, gridMode]);
+
+  const onlineCount = cameras.filter(c => readyCameras.has(c.id)).length;
+  const activeCam = cameras.find(c => c.id === activeCameraId);
+  const isGrid = gridMode !== "single";
+
+  const GRID_MODES = [
+    { id: "single" as const, label: "1x1", icon: Maximize2, hint: "Single" },
+    { id: "dual" as const, label: "2x1", icon: Columns2, hint: "Dual" },
+    { id: "quad" as const, label: "2x2", icon: Grid2x2, hint: "Quad" },
+    { id: "matrix" as const, label: "ALL", icon: Grid3x3, hint: "Matrix" },
+  ];
+
   return (
     <div style={{ width: "100%" }}>
       {showModal && <CameraModal onClose={() => setShowModal(false)} onSuccess={fetchCameras} />}
 
-      {/* Camera Selector Bar */}
-      {showCameraSelector && (
-        <div style={{
-          background: "#ffffff",
-          borderRadius: 12,
-          padding: "12px 20px",
-          marginBottom: 20,
-          boxShadow: "var(--shadow-sm)",
-          border: "1px solid rgba(0,0,0,0.06)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {/* Camera icon */}
-            <div style={{
-              width: 34, height: 34, borderRadius: 8,
-              background: "var(--bg-deep)",
-              border: "1px solid rgba(0,0,0,0.06)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-              </svg>
+      {/* Camera Selector Bar — Only shown on live video stream pages */}
+      {showCameraSelector && currentTab !== "log" && currentTab !== "gallery" && (
+        <div className="snt-cambar">
+          <div className="snt-cambrand">
+            <div className="snt-cambrand-icon">
+              <Camera size={16} color="#fff" />
             </div>
-
-            <select
-              value={activeCameraId}
-              onChange={(e) => setActiveCameraId(e.target.value)}
-              style={{
-                background: "var(--bg-deep)",
-                color: "var(--text-primary)",
-                border: "1px solid rgba(0,0,0,0.08)",
-                borderRadius: 8,
-                padding: "7px 12px",
-                outline: "none",
-                cursor: "pointer",
-                fontSize: 12.5,
-                fontWeight: 600,
-                fontFamily: "inherit",
-                minWidth: 200,
-              }}
-            >
-              {cameras.map(c => {
-                const online = readyCameras.has(c.id);
-                return (
-                  <option key={c.id} value={c.id}>
-                    {online ? "🟢" : "🔴"} {c.name} ({c.place})
-                  </option>
-                );
-              })}
-            </select>
-
-            <button
-              onClick={() => setShowModal(true)}
-              style={{
-                background: "var(--violet)",
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                padding: "8px 16px",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 12.5,
-                fontFamily: "inherit",
-                boxShadow: "0 2px 8px rgba(99,102,241,0.25)",
-                transition: "all 0.2s ease",
-              }}
-            >
-              + Add Camera
-            </button>
+            <div className="snt-cambrand-text">
+              <span className="snt-cambrand-label">Live Camera Source</span>
+              <span className="snt-cambrand-sub">
+                {onlineCount}/{cameras.length} streams online
+              </span>
+            </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="dot-live" />
-            <span style={{ color: "var(--green)", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em" }}>SYSTEM ONLINE</span>
+          {/* Camera chips */}
+          <div className="snt-chiprow">
+            {cameras.map(c => {
+              const online = readyCameras.has(c.id);
+              const active = c.id === activeCameraId;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveCameraId(c.id)}
+                  className={`snt-chip ${active ? "snt-chip-active" : ""}`}
+                >
+                  <span className={`snt-chip-dot ${online ? "snt-chip-dot-on" : "snt-chip-dot-off"}`} />
+                  <span className="snt-chip-name">{c.name}</span>
+                  <span className="snt-chip-place">{c.place}</span>
+                </button>
+              );
+            })}
           </div>
+
+          {/* Grid layout switcher */}
+          <div className="snt-gridseg">
+            {GRID_MODES.map(m => {
+              const Icon = m.icon;
+              const act = gridMode === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setGridMode(m.id)}
+                  title={m.hint}
+                  className={`snt-gridseg-btn ${act ? "snt-gridseg-active" : ""}`}
+                >
+                  <Icon size={13} />
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button onClick={() => setShowModal(true)} className="btn-primary snt-addcam">
+            <Plus size={13} />
+            Add Camera
+          </button>
         </div>
       )}
 
-      {/* Main */}
-      <main style={{ maxWidth: 1400, margin: "0 auto", padding: "0 0 28px 0" }}>
-        {activeCameraId ? (
-          <WebRTCStream key={activeCameraId} streamName={activeCameraId} serverPort="8889" initialTab={currentTab} />
+      {/* Main Content View */}
+      <main style={{ maxWidth: 1500, margin: "0 auto", padding: "0 0 28px 0" }}>
+        {currentTab === "log" ? (
+          /* Full Page Detection Log View (No video streams) */
+          <div className="snt-pagecard">
+            <LogPanel logs={[]} faces={[]} onRefresh={fetchCameras} autoRefresh={true} />
+          </div>
+        ) : currentTab === "gallery" ? (
+          /* Full Page Face Gallery View */
+          <div className="snt-pagecard">
+            <GalleryPanel faces={[]} onDelete={() => {}} />
+          </div>
+        ) : gridCameras.length > 0 ? (
+          gridMode === "single" ? (
+            /* Single view — hero stream with full sidebar */
+            <div className="snt-hero">
+              <WebRTCStream streamName={activeCam?.id || gridCameras[0].id} serverPort="8889" initialTab={currentTab} detectionOnly={false} />
+            </div>
+          ) : (
+            /* Live Stream Grid View (compact tiles) */
+            <div className="snt-grid">
+              {gridCameras.map(cam => {
+                const online = readyCameras.has(cam.id);
+                return (
+                  <div key={cam.id} className="snt-gridtile">
+                    <div className="snt-tilehead">
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <span className={`snt-chip-dot ${online ? "snt-chip-dot-on" : "snt-chip-dot-off"}`} />
+                        <span className="snt-tilehead-name">{cam.name} <span style={{ opacity: 0.7, fontWeight: 500 }}>({cam.place})</span></span>
+                      </div>
+                      <span className="snt-tilehead-src">
+                        <Cctv size={10} color="#94a3b8" />
+                        {cam.source_type === "device" ? `USB Dev #${cam.device_index ?? 0}` : "RTSP"}
+                      </span>
+                    </div>
+                    <WebRTCStream streamName={cam.id} serverPort="8889" initialTab={currentTab} detectionOnly={true} />
+                  </div>
+                );
+              })}
+            </div>
+          )
         ) : (
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            height: 300, color: "var(--text-muted)", fontSize: 14,
-            background: "#ffffff", borderRadius: 12,
-            border: "1px solid rgba(0,0,0,0.06)",
-          }}>
-            Loading cameras…
+          <div className="snt-loading">
+            <div className="snt-spin" />
+            <span>Loading camera feeds…</span>
           </div>
         )}
       </main>
@@ -187,11 +234,65 @@ function HomeContent() {
         color: "var(--text-faint)",
         letterSpacing: "0.04em",
       }}>
-        © 2026 SENTINEL AI · POWERED BY INSIGHTFACE buffalo_l · WEBRTC ZERO-LATENCY
+        © 2026 SENTINEL AI · POWERED BY INSIGHTFACE buffalo_l · WEBRTC ZERO-LATENCY MATRIX
       </footer>
+
+      <style>{`
+        .snt-cambar{display:flex;align-items:center;gap:14;flex-wrap:wrap;padding:14px 16px;margin-bottom:20px;
+          background:rgba(255,255,255,0.85);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+          border-radius:18px;border:1px solid rgba(255,255,255,0.65);box-shadow:var(--shadow-md)}
+
+        .snt-cambrand{display:flex;align-items:center;gap:10;flex-shrink:0}
+        .snt-cambrand-icon{width:36px;height:36px;border-radius:12px;
+          background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);
+          box-shadow:0 3px 10px rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center}
+        .snt-cambrand-text{display:flex;flex-direction:column;gap:1px}
+        .snt-cambrand-label{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-faint)}
+        .snt-cambrand-sub{font-size:12px;font-weight:700;color:var(--text-primary)}
+
+        .snt-chiprow{flex:1 1 280px;min-width:200px;display:flex;gap:8;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:thin}
+        .snt-chip{display:inline-flex;align-items:center;gap:6;padding:7px 11px;border-radius:12px;white-space:nowrap;
+          background:#fff;border:1px solid var(--border-strong);color:var(--text-secondary);cursor:pointer;
+          font-family:inherit;font-size:11.5px;font-weight:650;transition:all .18s ease}
+        .snt-chip:hover{border-color:var(--violet);box-shadow:var(--shadow-sm)}
+        .snt-chip-active{border-color:var(--violet);background:var(--violet-soft);color:var(--violet-deep);box-shadow:0 0 0 3px rgba(99,102,241,0.12)}
+        .snt-chip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+        .snt-chip-dot-on{background:#10b981;box-shadow:0 0 6px #10b981}
+        .snt-chip-dot-off{background:#ef4444;opacity:0.8}
+        .snt-chip-place{font-size:10px;font-weight:500;opacity:0.65}
+
+        .snt-gridseg{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:12px;flex-shrink:0;
+          background:rgba(15,23,42,0.05);border:1px solid rgba(0,0,0,0.07)}
+        .snt-gridseg-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:none;border-radius:9px;cursor:pointer;
+          background:transparent;color:#64748b;font-family:inherit;font-size:11px;font-weight:700;transition:all .15s ease}
+        .snt-gridseg-btn:hover{color:var(--violet-deep)}
+        .snt-gridseg-active{background:#fff;color:var(--violet-deep);box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+
+        .snt-addcam{flex-shrink:0}
+
+        .snt-pagecard{background:#ffffff;border-radius:20px;padding:24px;border:1px solid rgba(0,0,0,0.06);box-shadow:0 4px 20px rgba(0,0,0,0.04)}
+        .snt-hero{width:100%}
+
+        .snt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+        .snt-gridtile{border-radius:18px;overflow:hidden;border:1px solid rgba(0,0,0,0.09);box-shadow:0 4px 18px rgba(0,0,0,0.05);background:#fff}
+        .snt-tilehead{display:flex;justify-content:space-between;align-items:center;gap:8;padding:10px 14px;background:#111827;color:#fff}
+        .snt-tilehead-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .snt-tilehead-src{display:inline-flex;align-items:center;gap:5;font-size:10px;color:#94a3b8;font-family:var(--font-mono)}
+
+        .snt-loading{display:flex;align-items:center;justify-content:center;gap:12;height:280px;color:var(--text-muted);
+          font-size:14px;background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.06)}
+        .snt-spin{width:22px;height:22px;border:3px solid rgba(99,102,241,0.25);border-top-color:#6366f1;border-radius:50%;animation:spin 0.8s linear infinite}
+
+        @media (max-width: 720px){
+          .snt-grid{grid-template-columns:1fr}
+          .snt-gridseg{width:100%;justify-content:space-between}
+          .snt-addcam{width:100%;justify-content:center}
+        }
+      `}</style>
     </div>
   );
 }
+
 
 export default function Home() {
   return (

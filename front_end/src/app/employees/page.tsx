@@ -20,6 +20,8 @@ import {
   UserX,
   Pencil,
   Filter,
+  Fingerprint,
+  BadgeCheck,
 } from "lucide-react";
 
 interface Employee {
@@ -33,6 +35,43 @@ interface Employee {
   mobile: string | null;
   is_active: boolean | null;
   created_at: string | null;
+}
+
+// ---- Design tokens (kept local to this file, no functional impact) ----
+const INK = "#101B22";
+const MUTED = "#6B6558";
+const PAPER = "#F7F5F0";
+const BORDER = "#E4E0D6";
+const TEAL = "#1F6F5C";
+const TEAL_DEEP = "#164F42";
+const AMBER = "#C9762C";
+const RUST = "#B3432B";
+
+const fieldClass =
+  "w-full bg-[#F7F5F0] border border-[#E4E0D6] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[#101B22] outline-none transition-colors duration-150 focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10 placeholder:text-[#B0A996]";
+
+const labelClass =
+  "block text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[#8A8375] mb-2";
+
+function Stat({
+  label,
+  value,
+  color = INK,
+}: {
+  label: string;
+  value: number;
+  color?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center leading-tight">
+      <span className="erg-font-display text-[19px] font-bold" style={{ color }}>
+        {value}
+      </span>
+      <span className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#9C9585]">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 export default function EmployeesPage() {
@@ -64,7 +103,95 @@ export default function EmployeesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Fetch employees
+  const [dynamicDepts, setDynamicDepts] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [showDeptModal, setShowDeptModal] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptCode, setNewDeptCode] = useState("");
+  const [creatingDept, setCreatingDept] = useState(false);
+  const [deptModalError, setDeptModalError] = useState("");
+
+  // Bulk HRMS Import State
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkInputText, setBulkInputText] = useState("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<any>(null);
+  const [bulkError, setBulkError] = useState("");
+
+  // Fetch dynamic departments
+  const fetchDepartments = async () => {
+    try {
+      const res = await fetch("/api/departments");
+      if (res.ok) {
+        const data = await res.json();
+        setDynamicDepts(data);
+      }
+    } catch (err) {
+      console.error("Error fetching dynamic departments:", err);
+    }
+  };
+
+  const handleCreateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDeptName.trim() || !newDeptCode.trim()) return;
+    setCreatingDept(true);
+    setDeptModalError("");
+    try {
+      const res = await fetch("/api/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: newDeptCode, name: newDeptName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create department");
+      setDepartment(newDeptName);
+      setNewDeptName("");
+      setNewDeptCode("");
+      setShowDeptModal(false);
+      await fetchDepartments();
+    } catch (err: any) {
+      setDeptModalError(err.message || "Error creating department");
+    } finally {
+      setCreatingDept(false);
+    }
+  };
+
+  const handleBulkUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkInputText.trim()) return;
+
+    setBulkSubmitting(true);
+    setBulkError("");
+    setBulkResult(null);
+
+    try {
+      let parsedData;
+      try {
+        parsedData = JSON.parse(bulkInputText);
+      } catch (jsonErr) {
+        throw new Error("Invalid JSON format. Please check syntax (array of employee objects required).");
+      }
+
+      const res = await fetch("/api/hrms/bulk_register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsedData),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk upload failed.");
+
+      setBulkResult(data.results || data);
+      fetchEmployees();
+      fetchDepartments();
+    } catch (err: any) {
+      console.error("Bulk upload error:", err);
+      setBulkError(err.message || "Failed to process bulk dataset.");
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
+  // Fetch employees & departments
   const fetchEmployees = async () => {
     setLoading(true);
     try {
@@ -83,6 +210,7 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     fetchEmployees();
+    fetchDepartments();
     return () => {
       stopCamera();
     };
@@ -168,7 +296,7 @@ export default function EmployeesPage() {
     try {
       const res = await fetch(`/api/registered_faces/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete employee profile.");
-      
+
       setEmployees((prev) => prev.filter((item) => item.id !== id));
     } catch (err: any) {
       alert(err.message || "Failed to delete.");
@@ -243,7 +371,7 @@ export default function EmployeesPage() {
 
       setFormSuccess(`Employee "${name}" has been successfully ${isEdit ? "updated" : "registered"}!`);
       fetchEmployees();
-      
+
       setTimeout(() => {
         closeForm();
       }, 1500);
@@ -267,113 +395,133 @@ export default function EmployeesPage() {
   });
 
   const departmentsList = Array.from(
-    new Set(employees.map((emp) => emp.department).filter(Boolean))
+    new Set([
+      ...dynamicDepts.map((d) => d.name),
+      ...employees.map((emp) => emp.department).filter(Boolean),
+    ])
   ) as string[];
 
-  return (
-    <div style={{ width: "100%", maxWidth: 1400, margin: "0 auto", padding: "8px 0 32px 0" }}>
+  const activeCount = employees.filter((e) => e.is_active).length;
 
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+  return (
+    <div className="w-full max-w-[1400px] mx-auto px-0 py-2 pb-10 erg-font-body" style={{ color: INK }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+        .erg-font-display { font-family: 'Space Grotesk', ui-sans-serif, sans-serif; }
+        .erg-font-body { font-family: 'Inter', ui-sans-serif, sans-serif; }
+        .erg-font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        @keyframes erg-drawer-in { from { transform: translateX(24px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes erg-fade-in { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes erg-pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+        .erg-drawer { animation: erg-drawer-in .22s cubic-bezier(.16,1,.3,1) }
+        .erg-backdrop { animation: erg-fade-in .18s ease-out }
+        .erg-card { animation: erg-fade-in .25s ease-out }
+        .erg-live-dot { animation: erg-pulse-dot 1.8s ease-in-out infinite }
+      `}</style>
+
+      {/* ---------------- Header / hero ---------------- */}
+      <div className="flex flex-wrap items-end justify-between gap-5 mb-7">
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", color: "#111827", margin: "0 0 4px 0" }}>
-            Employee Registry
+          <div
+            className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] mb-2"
+            style={{ color: TEAL }}
+          >
+            <Fingerprint size={14} strokeWidth={2.4} />
+            Biometric Access Registry
+          </div>
+          <h1 className="erg-font-display text-[27px] leading-none font-bold tracking-tight" style={{ color: INK }}>
+            Employee Directory
           </h1>
-          <p style={{ fontSize: 13, color: "#6b7280", margin: 0, fontWeight: 500 }}>
-            Manage registered profiles, facial embeddings, and employee details.
+          <p className="text-[13px] mt-2" style={{ color: MUTED }}>
+            Enroll faces, manage roles, and control who has access.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setFormError("");
-            setFormSuccess("");
-            setShowForm(true);
-          }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: 12,
-            padding: "10px 18px",
-            fontSize: 13.5,
-            fontWeight: 700,
-            cursor: "pointer",
-            boxShadow: "0 4px 14px rgba(99,102,241,0.3)",
-          }}
+
+        <div
+          className="flex items-center gap-5 rounded-2xl px-6 py-3.5 bg-white"
+          style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,27,34,0.04)" }}
         >
-          <Plus size={16} />
-          Register Employee
-        </button>
+          <Stat label="Enrolled" value={employees.length} />
+          <div className="h-8 w-px" style={{ background: BORDER }} />
+          <Stat label="Active" value={activeCount} color={TEAL} />
+          <div className="h-8 w-px" style={{ background: BORDER }} />
+          <Stat label="Inactive" value={employees.length - activeCount} color={RUST} />
+        </div>
       </div>
 
-      {/* Directory Filter / Actions Bar */}
+      {/* ---------------- Toolbar ---------------- */}
       <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid #e5e7eb",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-          borderRadius: 16,
-          padding: 16,
-          display: "flex",
-          gap: 16,
-          flexWrap: "wrap",
-          alignItems: "center",
-          marginBottom: 24,
-        }}
+        className="bg-white rounded-2xl p-4 flex flex-wrap gap-4 items-center mb-6"
+        style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,27,34,0.03)" }}
       >
-        {/* Search */}
-        <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
-          <Search
-            size={16}
-            style={{
-              position: "absolute",
-              left: 14,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "#9ca3af",
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => {
+              setFormError("");
+              setFormSuccess("");
+              setShowForm(true);
             }}
-          />
+            className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13.5px] font-bold text-white transition-transform duration-150 hover:-translate-y-[1px] active:translate-y-0 focus:outline-none focus-visible:ring-4"
+            style={{
+              background: `linear-gradient(135deg, ${TEAL} 0%, ${TEAL_DEEP} 100%)`,
+              boxShadow: "0 6px 16px rgba(31,111,92,0.28)",
+            }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            Register Employee
+          </button>
+
+          <button
+            onClick={() => {
+              setBulkError("");
+              setBulkResult(null);
+              setShowBulkModal(true);
+            }}
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition-all hover:bg-[#F7F5F0]"
+            style={{ border: `1px solid ${BORDER}`, color: INK }}
+          >
+            <Upload size={15} style={{ color: TEAL }} />
+            Bulk HRMS Import
+          </button>
+
+          <a
+            href="/employee-register"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all hover:underline"
+            style={{ color: TEAL }}
+          >
+            Public Onboarding Portal ↗
+          </a>
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-[260px]">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#A9A192" }} />
           <input
             type="text"
-            placeholder="Search by name, employee code or department..."
+            placeholder="Search by name, employee code, or department…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%",
-              background: "#f9fafb",
-              border: "1px solid #d1d5db",
-              borderRadius: 10,
-              padding: "10px 14px 10px 38px",
-              color: "#111827",
-              fontSize: 13.5,
-              outline: "none",
-            }}
+            className={`${fieldClass} pl-10`}
           />
         </div>
 
         {/* Department Filter */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#4b5563" }}>Department:</span>
+        <div className="flex items-center gap-2.5">
+          <Filter size={14} style={{ color: "#A9A192" }} />
+          <span className="text-[13px] font-semibold" style={{ color: MUTED }}>
+            Department
+          </span>
           <select
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
-            style={{
-              background: "#f9fafb",
-              border: "1px solid #d1d5db",
-              borderRadius: 10,
-              padding: "9px 14px",
-              color: "#111827",
-              fontSize: 13.5,
-              outline: "none",
-              cursor: "pointer",
-            }}
+            className="bg-[#F7F5F0] rounded-xl px-3.5 py-2.5 text-[13.5px] outline-none cursor-pointer transition-colors focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10"
+            style={{ border: `1px solid ${BORDER}`, color: INK }}
           >
-            <option value="All" style={{ background: "#fff", color: "#111827" }}>All Departments</option>
+            <option value="All">All Departments</option>
             {departmentsList.map((d) => (
-              <option key={d} value={d} style={{ background: "#fff", color: "#111827" }}>
+              <option key={d} value={d}>
                 {d}
               </option>
             ))}
@@ -383,207 +531,164 @@ export default function EmployeesPage() {
         {/* Reload */}
         <button
           onClick={fetchEmployees}
-          style={{
-            background: "#f9fafb",
-            border: "1px solid #d1d5db",
-            borderRadius: 10,
-            width: 40,
-            height: 40,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            color: "#6b7280",
-          }}
           title="Reload registry"
+          className="rounded-xl w-10 h-10 flex items-center justify-center transition-colors hover:bg-[#F7F5F0] focus:outline-none focus-visible:ring-4"
+          style={{ border: `1px solid ${BORDER}`, color: MUTED }}
         >
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
 
-      {/* Main Grid View of Registered Employees */}
+      {/* ---------------- Main content ---------------- */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#6b7280" }}>
-          <RefreshCw className="animate-spin" style={{ margin: "0 auto 12px", opacity: 0.6 }} />
-          <div>Retrieving registered employees...</div>
+        <div className="flex flex-col items-center gap-3 py-16" style={{ color: MUTED }}>
+          <RefreshCw className="animate-spin" size={22} style={{ opacity: 0.6 }} />
+          <div className="text-[13.5px] font-medium">Retrieving registered employees…</div>
         </div>
       ) : error ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "50px 20px", color: "#ef4444" }}>
-          <AlertTriangle size={32} />
-          <div>{error}</div>
+        <div
+          className="flex flex-col items-center gap-3 py-14 px-5 rounded-2xl bg-white"
+          style={{ color: RUST, border: `1px solid ${BORDER}` }}
+        >
+          <AlertTriangle size={30} />
+          <div className="text-[13.5px] font-semibold text-center">{error}</div>
           <button
             onClick={fetchEmployees}
-            style={{
-              background: "rgba(239,68,68,0.1)",
-              border: "1px solid rgba(239,68,68,0.2)",
-              color: "#ef4444",
-              borderRadius: 8,
-              padding: "6px 14px",
-              cursor: "pointer",
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
+            className="rounded-lg px-4 py-1.5 text-[12.5px] font-bold transition-colors hover:brightness-95"
+            style={{ background: "rgba(179,67,43,0.08)", border: "1px solid rgba(179,67,43,0.25)", color: RUST }}
           >
             Retry Fetch
           </button>
         </div>
       ) : filteredEmployees.length === 0 ? (
         <div
-          style={{
-            textAlign: "center",
-            padding: "80px 20px",
-            background: "#ffffff",
-            border: "1px solid #e5e7eb",
-            borderRadius: 16,
-            color: "#6b7280",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-          }}
+          className="text-center py-20 px-6 bg-white rounded-2xl"
+          style={{ border: `1px solid ${BORDER}`, color: MUTED, boxShadow: "0 1px 3px rgba(16,27,34,0.03)" }}
         >
-          <User size={48} style={{ margin: "0 auto 16px", opacity: 0.25 }} />
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 4px 0" }}>
-            No Employees Found
+          <User size={44} className="mx-auto mb-4" style={{ opacity: 0.22 }} />
+          <h3 className="erg-font-display text-[16px] font-bold mb-1" style={{ color: INK }}>
+            No employees found
           </h3>
-          <p style={{ fontSize: 13, margin: 0 }}>
+          <p className="text-[13px]">
             {searchQuery || deptFilter !== "All"
-              ? "No registered profiles match your search criteria."
-              : "Start by registering your first employee."}
+              ? "No enrolled profiles match your search. Try a different name, code, or department."
+              : "Register your first employee to enroll their face and start tracking access."}
           </p>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))", gap: 20 }}>
+        <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))" }}>
           {filteredEmployees.map((emp) => (
             <div
               key={emp.id}
-              style={{
-                background: "#ffffff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 16,
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-                transition: "transform 0.2s, box-shadow 0.2s",
-              }}
+              className="erg-card group bg-white rounded-2xl overflow-hidden flex flex-col relative transition-shadow duration-200 hover:shadow-[0_10px_28px_rgba(16,27,34,0.09)]"
+              style={{ border: `1px solid ${BORDER}` }}
             >
-              {/* Status Badge */}
+              {/* accent strip */}
               <div
-                onClick={() => handleToggleStatus(emp)}
-                style={{
-                  position: "absolute",
-                  top: 14,
-                  right: 14,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "4px 8px",
-                  borderRadius: 20,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  background: emp.is_active ? "rgba(16,185,129,0.1)" : "rgba(107,114,128,0.1)",
-                  color: emp.is_active ? "#059669" : "#6b7280",
-                  border: emp.is_active ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(107,114,128,0.2)",
-                  cursor: "pointer",
-                  userSelect: "none",
-                }}
-                title="Click to toggle status"
-              >
-                {emp.is_active ? <UserCheck size={11} /> : <UserX size={11} />}
-                {emp.is_active ? "Active" : "Inactive"}
-              </div>
+                className="absolute left-0 top-0 bottom-0 w-1"
+                style={{ background: emp.is_active ? TEAL : "#C9C2B2" }}
+              />
 
-              {/* Profile Card Top */}
-              <div style={{ padding: 20, display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #f3f4f6" }}>
-                {/* Photo */}
-                <div style={{ width: 64, height: 64, borderRadius: 14, background: "#f3f4f6", border: "1px solid #e5e7eb", overflow: "hidden", flexShrink: 0 }}>
+              {/* Status badge */}
+              <button
+                onClick={() => handleToggleStatus(emp)}
+                title="Click to toggle status"
+                className="absolute top-3.5 right-3.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-transform hover:scale-105 active:scale-95"
+                style={{
+                  background: emp.is_active ? "rgba(31,111,92,0.1)" : "rgba(107,101,88,0.1)",
+                  color: emp.is_active ? TEAL : MUTED,
+                  border: emp.is_active ? "1px solid rgba(31,111,92,0.22)" : "1px solid rgba(107,101,88,0.2)",
+                }}
+              >
+                {emp.is_active ? (
+                  <span className="erg-live-dot h-1.5 w-1.5 rounded-full" style={{ background: TEAL }} />
+                ) : (
+                  <UserX size={11} />
+                )}
+                {emp.is_active ? "Active" : "Inactive"}
+              </button>
+
+              {/* Card top */}
+              <div className="p-5 pl-6 flex items-center gap-4" style={{ borderBottom: `1px solid #F1EEE6` }}>
+                <div
+                  className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#F7F5F0]"
+                  style={{ border: `1px solid ${BORDER}` }}
+                >
                   {emp.photo_url ? (
-                    <img src={emp.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <img src={emp.photo_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(99,102,241,0.08)", color: "#6366f1", fontWeight: 700, fontSize: 18 }}>
+                    <div
+                      className="w-full h-full flex items-center justify-center font-bold text-[18px] erg-font-display"
+                      style={{ background: "rgba(31,111,92,0.08)", color: TEAL }}
+                    >
                       {emp.name[0]?.toUpperCase()}
                     </div>
                   )}
                 </div>
-                
-                <div style={{ minWidth: 0 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: "0 0 2px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+
+                <div className="min-w-0">
+                  <h3
+                    className="text-[15px] font-bold mb-1 whitespace-nowrap overflow-hidden text-ellipsis"
+                    style={{ color: INK }}
+                  >
                     {emp.name}
                   </h3>
                   {emp.employee_code && (
-                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#4f46e5", fontWeight: 600 }}>
-                      Code: {emp.employee_code}
+                    <div
+                      className="erg-font-mono inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-md tracking-wide"
+                      style={{ background: "rgba(31,111,92,0.08)", color: TEAL_DEEP }}
+                    >
+                      <BadgeCheck size={11} />
+                      {emp.employee_code}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Profile Card Body */}
-              <div style={{ padding: 20, flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-                {/* Department & Designation */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#374151" }}>
-                  <Building size={14} style={{ color: "#9ca3af", flexShrink: 0 }} />
-                  <span style={{ fontWeight: 600 }}>{emp.department || "No Department"}</span>
-                  <span style={{ color: "#d1d5db" }}>•</span>
-                  <Briefcase size={14} style={{ color: "#9ca3af", flexShrink: 0 }} />
-                  <span>{emp.designation || "No Designation"}</span>
+              {/* Card body */}
+              <div className="p-5 pl-6 flex-1 flex flex-col gap-2.5">
+                <div className="flex items-center gap-2.5 text-[13px]" style={{ color: "#374151" }}>
+                  <Building size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                  <span className="font-semibold">{emp.department || "No department"}</span>
+                  <span style={{ color: BORDER }}>•</span>
+                  <Briefcase size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                  <span>{emp.designation || "No designation"}</span>
                 </div>
 
-                {/* Contact Email */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "#6b7280", minWidth: 0 }}>
-                  <Mail size={14} style={{ color: "#9ca3af", flexShrink: 0 }} />
-                  <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                    {emp.email || "N/A"}
-                  </span>
+                <div className="flex items-center gap-2.5 text-[12.5px] min-w-0" style={{ color: MUTED }}>
+                  <Mail size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                  <span className="text-ellipsis overflow-hidden whitespace-nowrap">{emp.email || "N/A"}</span>
                 </div>
 
-                {/* Contact Phone */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "#6b7280" }}>
-                  <Phone size={14} style={{ color: "#9ca3af", flexShrink: 0 }} />
+                <div className="flex items-center gap-2.5 text-[12.5px]" style={{ color: MUTED }}>
+                  <Phone size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
                   <span>{emp.mobile || "N/A"}</span>
                 </div>
               </div>
 
-              {/* Profile Card Footer */}
-              <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f3f4f6", background: "#f9fafb" }}>
-                <span style={{ fontSize: 10.5, color: "#9ca3af", fontWeight: 500 }}>
+              {/* Card footer */}
+              <div
+                className="px-5 pl-6 py-3 flex justify-between items-center"
+                style={{ borderTop: "1px solid #F1EEE6", background: "#FBFAF7" }}
+              >
+                <span className="text-[10.5px] font-medium" style={{ color: "#B0A996" }}>
                   Registered {emp.created_at ? new Date(emp.created_at).toLocaleDateString("en-IN") : "N/A"}
                 </span>
 
-                <div style={{ display: "flex", gap: 6 }}>
-                  {/* Edit Button */}
+                <div className="flex gap-1">
                   <button
                     onClick={() => handleEditClick(emp)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 4,
-                      color: "#6366f1",
-                      cursor: "pointer",
-                      borderRadius: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                    title="Edit Employee Profile"
+                    title="Edit employee profile"
+                    className="p-1.5 rounded-md transition-colors hover:bg-[rgba(31,111,92,0.1)]"
+                    style={{ color: TEAL }}
                   >
                     <Pencil size={14} />
                   </button>
-
-                  {/* Delete Button */}
                   <button
                     onClick={() => handleDelete(emp.id, emp.name)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 4,
-                      color: "#ef4444",
-                      cursor: "pointer",
-                      borderRadius: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                    title="Remove Employee Profile"
+                    title="Remove employee profile"
+                    className="p-1.5 rounded-md transition-colors hover:bg-[rgba(179,67,43,0.1)]"
+                    style={{ color: RUST }}
                   >
                     <Trash2 size={15} />
                   </button>
@@ -594,418 +699,449 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* Registration / Edit Form Off-Canvas Drawer */}
+      {/* ---------------- Registration / Edit drawer ---------------- */}
       {showForm && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: 480,
-            background: "#ffffff",
-            boxShadow: "-10px 0 40px rgba(0,0,0,0.12)",
-            zIndex: 100,
-            display: "flex",
-            flexDirection: "column",
-            borderLeft: "1px solid #e5e7eb",
-            animation: "fadeInUp 0.2s ease-out",
-          }}
-        >
-          {/* Header */}
+        <>
           <div
-            style={{
-              padding: "20px 24px",
-              borderBottom: "1px solid #e5e7eb",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
+            className="erg-backdrop fixed inset-0 z-[99]"
+            style={{ background: "rgba(16,27,34,0.35)" }}
+            onClick={closeForm}
+          />
+          <div
+            className="erg-drawer fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white z-[100] flex flex-col"
+            style={{ boxShadow: "-10px 0 40px rgba(16,27,34,0.14)", borderLeft: `1px solid ${BORDER}` }}
           >
-            <div>
-              <h2 style={{ fontSize: 17, fontWeight: 800, margin: "0 0 2px 0", color: "#111827" }}>
-                {editEmployeeId ? "Edit Profile" : "Register Profile"}
-              </h2>
-              <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>
-                {editEmployeeId ? "Update employee details and embeddings" : "Enrolls face embeddings and basic information"}
-              </p>
-            </div>
-            <button
-              onClick={closeForm}
-              style={{
-                background: "#f3f4f6",
-                border: "none",
-                borderRadius: "50%",
-                width: 32,
-                height: 32,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                color: "#6b7280",
-              }}
+            {/* Header */}
+            <div
+              className="px-6 py-5 flex justify-between items-center"
+              style={{ borderBottom: `1px solid ${BORDER}` }}
             >
-              <X size={16} />
-            </button>
-          </div>
-
-          {/* Form Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px" }}>
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              
-              {/* Photo Capture Section */}
               <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 8 }}>
-                  Face Image Capture *
-                </label>
-                
-                <div
-                  style={{
-                    width: "100%",
-                    aspectRatio: "4/3",
-                    borderRadius: 14,
-                    border: "1px dashed #d1d5db",
-                    background: "#f9fafb",
-                    overflow: "hidden",
-                    position: "relative",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {cameraActive ? (
-                    <div style={{ width: "100%", height: "100%", position: "relative" }}>
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                      <button
-                        type="button"
-                        onClick={capturePhoto}
-                        style={{
-                          position: "absolute",
-                          bottom: 12,
-                          left: "50%",
-                          transform: "translateX(-50%)",
-                          background: "#6366f1",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: 8,
-                          padding: "8px 16px",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          boxShadow: "0 4px 12px rgba(99,102,241,0.3)",
-                        }}
-                      >
-                        Capture Frame
-                      </button>
-                    </div>
-                  ) : image ? (
-                    <div style={{ width: "100%", height: "100%", position: "relative" }}>
-                      <img src={image} alt="Enrolled Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImage(null);
-                          startCamera();
-                        }}
-                        style={{
-                          position: "absolute",
-                          top: 10,
-                          right: 10,
-                          background: "#ef4444",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: 8,
-                          padding: "4px 8px",
-                          fontSize: 11,
-                          cursor: "pointer",
-                          fontWeight: 700,
-                        }}
-                      >
-                        Retake / Change
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: 20, textAlign: "center" }}>
-                      <Camera size={32} style={{ color: "#9ca3af" }} />
-                      <div>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: "#111827", margin: "0 0 2px 0" }}>Take Face Image</p>
-                        <p style={{ fontSize: 11, color: "#6b7280", margin: 0 }}>Provide a clear face view for matching</p>
-                      </div>
-                      <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <h2 className="erg-font-display text-[17px] font-bold mb-0.5" style={{ color: INK }}>
+                  {editEmployeeId ? "Edit Profile" : "Register Profile"}
+                </h2>
+                <p className="text-[12px]" style={{ color: MUTED }}>
+                  {editEmployeeId ? "Update employee details and face data." : "Enrolls a face and basic details."}
+                </p>
+              </div>
+              <button
+                onClick={closeForm}
+                className="rounded-full w-8 h-8 flex items-center justify-center transition-colors hover:bg-[#F1EEE6]"
+                style={{ background: "#F7F5F0", color: MUTED }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Form content */}
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+                {/* Photo capture */}
+                <div>
+                  <label className={labelClass}>Face Image Capture *</label>
+
+                  <div
+                    className="w-full rounded-2xl overflow-hidden relative flex items-center justify-center bg-[#F7F5F0]"
+                    style={{ aspectRatio: "4/3", border: `1px dashed ${BORDER}` }}
+                  >
+                    {cameraActive ? (
+                      <div className="w-full h-full relative">
+                        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                         <button
                           type="button"
-                          onClick={startCamera}
-                          style={{
-                            background: "rgba(99,102,241,0.08)",
-                            border: "1px solid rgba(99,102,241,0.2)",
-                            color: "#6366f1",
-                            borderRadius: 8,
-                            padding: "6px 14px",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 5,
-                          }}
+                          onClick={capturePhoto}
+                          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg px-4 py-2 text-[12px] font-bold text-white transition-transform hover:-translate-y-[1px]"
+                          style={{ background: TEAL, boxShadow: "0 4px 12px rgba(31,111,92,0.35)" }}
                         >
-                          <Camera size={13} />
-                          Webcam
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          style={{
-                            background: "#f3f4f6",
-                            border: "1px solid #d1d5db",
-                            color: "#111827",
-                            borderRadius: 8,
-                            padding: "6px 14px",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 5,
-                          }}
-                        >
-                          <Upload size={13} />
-                          Upload File
+                          Capture Frame
                         </button>
                       </div>
-                    </div>
-                  )}
+                    ) : image ? (
+                      <div className="w-full h-full relative">
+                        <img src={image} alt="Enrolled preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImage(null);
+                            startCamera();
+                          }}
+                          className="absolute top-2.5 right-2.5 rounded-lg px-2.5 py-1 text-[11px] font-bold text-white transition-transform hover:-translate-y-[1px]"
+                          style={{ background: RUST }}
+                        >
+                          Retake / Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3 p-5 text-center">
+                        <Camera size={30} style={{ color: "#A9A192" }} />
+                        <div>
+                          <p className="text-[12px] font-semibold mb-0.5" style={{ color: INK }}>
+                            Take a face image
+                          </p>
+                          <p className="text-[11px]" style={{ color: MUTED }}>
+                            Use a clear, front-facing photo for accurate matching.
+                          </p>
+                        </div>
+                        <div className="flex gap-2.5 mt-1">
+                          <button
+                            type="button"
+                            onClick={startCamera}
+                            className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-[rgba(31,111,92,0.14)]"
+                            style={{ background: "rgba(31,111,92,0.08)", border: "1px solid rgba(31,111,92,0.22)", color: TEAL }}
+                          >
+                            <Camera size={13} />
+                            Webcam
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-[#F1EEE6]"
+                            style={{ background: "#F7F5F0", border: `1px solid ${BORDER}`, color: INK }}
+                          >
+                            <Upload size={13} />
+                            Upload File
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
                 </div>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  style={{ display: "none" }}
-                />
-              </div>
+                {/* Full Name */}
+                <div>
+                  <label className={labelClass}>Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
 
-              {/* Full Name */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 6 }}>
-                  Full Name *
+                {/* Employee Code */}
+                <div>
+                  <label className={labelClass}>Employee Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EMP-1092"
+                    value={employeeCode}
+                    onChange={(e) => setEmployeeCode(e.target.value)}
+                    className={`${fieldClass} erg-font-mono`}
+                  />
+                </div>
+
+                {/* Department & Designation */}
+                <div className="flex gap-3.5">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={labelClass}>Department</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeptModal(true)}
+                        className="text-[10px] font-bold tracking-wide uppercase transition-colors hover:underline"
+                        style={{ color: TEAL }}
+                      >
+                        + New Dept
+                      </button>
+                    </div>
+                    <select
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className={fieldClass}
+                    >
+                      <option value="">Select Department</option>
+                      {departmentsList.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className={labelClass}>Designation</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Lead Dev"
+                      value={designation}
+                      onChange={(e) => setDesignation(e.target.value)}
+                      className={fieldClass}
+                    />
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className={labelClass}>Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="e.g. john.doe@sentinel.ai"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+
+                {/* Mobile */}
+                <div>
+                  <label className={labelClass}>Mobile Number</label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. +91 9876543210"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+
+                {/* Status Toggle */}
+                <label
+                  htmlFor="isActiveToggle"
+                  className="flex items-center gap-3 mt-1 rounded-xl px-3.5 py-3 cursor-pointer transition-colors hover:bg-[#F7F5F0]"
+                  style={{ border: `1px solid ${BORDER}` }}
+                >
+                  <input
+                    type="checkbox"
+                    id="isActiveToggle"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="w-4 h-4 cursor-pointer"
+                    style={{ accentColor: TEAL }}
+                  />
+                  <span className="text-[13.5px] font-semibold" style={{ color: INK }}>
+                    Set profile as active
+                  </span>
                 </label>
+
+                {/* Error & Success Messages */}
+                {formError && (
+                  <div
+                    className="flex gap-2.5 rounded-xl p-3 text-[12.5px] font-semibold items-center"
+                    style={{ background: "rgba(179,67,43,0.08)", border: "1px solid rgba(179,67,43,0.22)", color: RUST }}
+                  >
+                    <AlertTriangle size={16} className="flex-shrink-0" />
+                    <div>{formError}</div>
+                  </div>
+                )}
+
+                {formSuccess && (
+                  <div
+                    className="flex gap-2.5 rounded-xl p-3 text-[12.5px] font-semibold items-center"
+                    style={{ background: "rgba(31,111,92,0.08)", border: "1px solid rgba(31,111,92,0.22)", color: TEAL_DEEP }}
+                  >
+                    <CheckCircle size={16} className="flex-shrink-0" />
+                    <div>{formSuccess}</div>
+                  </div>
+                )}
+
+                {/* Submit buttons */}
+                <div className="flex gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    className="flex-1 rounded-xl py-3 text-[13.5px] font-bold transition-colors hover:bg-[#F1EEE6]"
+                    style={{ background: "#F7F5F0", border: `1px solid ${BORDER}`, color: "#374151" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || !name.trim() || !image}
+                    className="flex-[2] rounded-xl py-3 text-[13.5px] font-bold text-white transition-transform duration-150 hover:-translate-y-[1px] disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+                    style={{
+                      background: `linear-gradient(135deg, ${TEAL} 0%, ${TEAL_DEEP} 100%)`,
+                      opacity: submitting || !name.trim() || !image ? 0.5 : 1,
+                      boxShadow: "0 6px 16px rgba(31,111,92,0.28)",
+                    }}
+                  >
+                    {submitting
+                      ? editEmployeeId
+                        ? "Saving…"
+                        : "Registering…"
+                      : editEmployeeId
+                        ? "Save Changes"
+                        : "Register Profile"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ---------------- Create Dynamic Department Modal ---------------- */}
+      {showDeptModal && (
+        <div className="erg-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" style={{ border: `1px solid ${BORDER}` }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="erg-font-display text-[17px] font-bold" style={{ color: INK }}>
+                Add Dynamic Department
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowDeptModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDepartment} className="space-y-4">
+              <div>
+                <label className={labelClass}>Department Code *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#f9fafb",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    color: "#111827",
-                    fontSize: 13.5,
-                    outline: "none",
-                  }}
+                  placeholder="e.g. ENG, HR, MKTG"
+                  value={newDeptCode}
+                  onChange={(e) => setNewDeptCode(e.target.value.toUpperCase())}
+                  className={`${fieldClass} erg-font-mono`}
                 />
               </div>
 
-              {/* Employee Code */}
               <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 6 }}>
-                  Employee Code
-                </label>
+                <label className={labelClass}>Department Name *</label>
                 <input
                   type="text"
-                  placeholder="e.g. EMP-1092"
-                  value={employeeCode}
-                  onChange={(e) => setEmployeeCode(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#f9fafb",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    color: "#111827",
-                    fontSize: 13.5,
-                    outline: "none",
-                  }}
+                  required
+                  placeholder="e.g. Artificial Intelligence"
+                  value={newDeptName}
+                  onChange={(e) => setNewDeptName(e.target.value)}
+                  className={fieldClass}
                 />
               </div>
 
-              {/* Department & Designation in two columns */}
-              <div style={{ display: "flex", gap: 14 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 6 }}>
-                    Department
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Engineering"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    style={{
-                      width: "100%",
-                      background: "#f9fafb",
-                      border: "1px solid #d1d5db",
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      color: "#111827",
-                      fontSize: 13.5,
-                      outline: "none",
-                    }}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 6 }}>
-                    Designation
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Lead Dev"
-                    value={designation}
-                    onChange={(e) => setDesignation(e.target.value)}
-                    style={{
-                      width: "100%",
-                      background: "#f9fafb",
-                      border: "1px solid #d1d5db",
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      color: "#111827",
-                      fontSize: 13.5,
-                      outline: "none",
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Email */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 6 }}>
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  placeholder="e.g. john.doe@sentinel.ai"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#f9fafb",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    color: "#111827",
-                    fontSize: 13.5,
-                    outline: "none",
-                  }}
-                />
-              </div>
-
-              {/* Mobile */}
-              <div>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.05em", marginBottom: 6 }}>
-                  Mobile Number
-                </label>
-                <input
-                  type="tel"
-                  placeholder="e.g. +91 9876543210"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "#f9fafb",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    color: "#111827",
-                    fontSize: 13.5,
-                    outline: "none",
-                  }}
-                />
-              </div>
-
-              {/* Status Toggle */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
-                <input
-                  type="checkbox"
-                  id="isActiveToggle"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  style={{
-                    width: 16,
-                    height: 16,
-                    accentColor: "#6366f1",
-                    cursor: "pointer",
-                  }}
-                />
-                <label htmlFor="isActiveToggle" style={{ fontSize: 13.5, fontWeight: 600, color: "#111827", cursor: "pointer" }}>
-                  Set Profile as Active
-                </label>
-              </div>
-
-              {/* Error & Success Messages */}
-              {formError && (
-                <div style={{ display: "flex", gap: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: 12, color: "#ef4444", fontSize: 12.5, alignItems: "center", fontWeight: 600 }}>
-                  <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-                  <div>{formError}</div>
+              {deptModalError && (
+                <div className="text-[12px] font-semibold" style={{ color: RUST }}>
+                  {deptModalError}
                 </div>
               )}
 
-              {formSuccess && (
-                <div style={{ display: "flex", gap: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 10, padding: 12, color: "#10b981", fontSize: 12.5, alignItems: "center", fontWeight: 600 }}>
-                  <CheckCircle size={16} style={{ flexShrink: 0 }} />
-                  <div>{formSuccess}</div>
-                </div>
-              )}
-
-              {/* Submit Buttons */}
-              <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={closeForm}
-                  style={{
-                    flex: 1,
-                    background: "#f3f4f6",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 12,
-                    padding: "12px 0",
-                    fontSize: 13.5,
-                    fontWeight: 700,
-                    color: "#374151",
-                    cursor: "pointer",
-                  }}
+                  onClick={() => setShowDeptModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border text-[13px] font-bold text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || !name.trim() || !image}
-                  style={{
-                    flex: 2,
-                    background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-                    color: "#ffffff",
-                    border: "none",
-                    borderRadius: 12,
-                    padding: "12px 0",
-                    fontSize: 13.5,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    opacity: submitting || !name.trim() || !image ? 0.5 : 1,
-                    boxShadow: "0 4px 16px rgba(99,102,241,0.3)",
-                  }}
+                  disabled={creatingDept || !newDeptName.trim() || !newDeptCode.trim()}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-white transition-opacity disabled:opacity-50"
+                  style={{ background: TEAL }}
                 >
-                  {submitting ? (editEmployeeId ? "Saving..." : "Registering...") : (editEmployeeId ? "Save Changes" : "Register Profile")}
+                  {creatingDept ? "Saving..." : "Create Department"}
                 </button>
               </div>
-
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- Bulk HRMS Import Modal ---------------- */}
+      {showBulkModal && (
+        <div className="erg-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/45">
+          <div className="bg-white rounded-3xl p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col" style={{ border: `1px solid ${BORDER}` }}>
+            <div className="flex items-center justify-between pb-4 border-b border-[#E4E0D6] mb-4">
+              <div>
+                <h3 className="erg-font-display text-[18px] font-bold" style={{ color: INK }}>
+                  HRMS Bulk Employee Integration
+                </h3>
+                <p className="text-[12px]" style={{ color: MUTED }}>
+                  Import multiple employee profiles and face data via JSON dataset or REST API.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="text-gray-400 hover:text-gray-600 rounded-full p-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-5">
+              {/* Endpoint Documentation Box */}
+              <div className="rounded-2xl p-4 bg-[#F7F5F0] border border-[#E4E0D6] space-y-2 text-[12.5px]">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[11px] uppercase tracking-wide" style={{ color: TEAL }}>
+                    HRMS Direct Integration Endpoint
+                  </span>
+                  <span className="erg-font-mono text-[10.5px] px-2 py-0.5 rounded bg-white border border-[#E4E0D6]" style={{ color: TEAL_DEEP }}>
+                    POST /api/hrms/bulk_register
+                  </span>
+                </div>
+                <p style={{ color: MUTED }}>
+                  Your HRMS (Workday, BambooHR, SAP, custom systems) can push employee records directly using JSON payloads containing <code>photo_base64</code> or <code>photo_url</code>.
+                </p>
+              </div>
+
+              <form onSubmit={handleBulkUpload} className="space-y-4">
+                <div>
+                  <label className={labelClass}>Paste HRMS JSON Dataset (Array of Employee Objects) *</label>
+                  <textarea
+                    rows={8}
+                    required
+                    placeholder={`[\n  {\n    "name": "Sarah Connor",\n    "employee_code": "EMP-9001",\n    "department": "Engineering",\n    "designation": "AI Lead",\n    "email": "sarah.connor@company.com",\n    "photo_base64": "data:image/jpeg;base64,..."\n  }\n]`}
+                    value={bulkInputText}
+                    onChange={(e) => setBulkInputText(e.target.value)}
+                    className={`${fieldClass} erg-font-mono text-[12px] leading-relaxed`}
+                  />
+                </div>
+
+                {bulkError && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl text-[12.5px] font-semibold" style={{ background: "rgba(179,67,43,0.08)", border: "1px solid rgba(179,67,43,0.22)", color: RUST }}>
+                    <AlertTriangle size={16} className="flex-shrink-0" />
+                    <div>{bulkError}</div>
+                  </div>
+                )}
+
+                {bulkResult && (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2 text-[13px]">
+                    <div className="font-bold flex items-center gap-2 text-emerald-700">
+                      <CheckCircle size={18} />
+                      Bulk Sync Finished: {bulkResult.succeeded} Succeeded, {bulkResult.failed} Failed
+                    </div>
+                    {bulkResult.errors && bulkResult.errors.length > 0 && (
+                      <div className="text-[12px] text-red-600 mt-2 space-y-1">
+                        {bulkResult.errors.map((err: any, idx: number) => (
+                          <div key={idx}>• {err.name || err.employee_code}: {err.error}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkModal(false)}
+                    className="flex-1 py-3 rounded-xl border text-[13.5px] font-bold text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={bulkSubmitting || !bulkInputText.trim()}
+                    className="flex-[2] py-3 rounded-xl text-[13.5px] font-bold text-white transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                    style={{ background: `linear-gradient(135deg, ${TEAL} 0%, ${TEAL_DEEP} 100%)` }}
+                  >
+                    {bulkSubmitting ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Processing HRMS Import…
+                      </>
+                    ) : (
+                      "Start Bulk Registration Sync"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

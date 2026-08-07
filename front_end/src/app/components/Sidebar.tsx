@@ -40,6 +40,41 @@ const NAV_ITEMS = [
     activeBg: "rgba(59,130,246,0.08)",
   },
   {
+    label: "Departments",
+    id: "departments",
+    href: "/departments",
+    shortcut: "D",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
+        <path d="M6 12H4a2 2 0 0 0-2 2v8h4"/>
+        <path d="M18 9h2a2 2 0 0 1 2 2v11h-4"/>
+        <path d="M10 6h4"/>
+        <path d="M10 10h4"/>
+        <path d="M10 14h4"/>
+        <path d="M10 18h4"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #10b981, #059669)",
+    activeColor: "#10b981",
+    activeBg: "rgba(16,185,129,0.08)",
+  },
+  {
+    label: "Cameras",
+    id: "cameras",
+    href: "/cameras",
+    shortcut: "M",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M23 7l-7 5 7 5V7z" />
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+    activeColor: "#14b8a6",
+    activeBg: "rgba(20,184,166,0.08)",
+  },
+  {
     label: "Register Face",
     id: "register",
     href: "/?tab=register",
@@ -107,14 +142,50 @@ const NAV_ITEMS = [
     activeColor: "#ef4444",
     activeBg: "rgba(239,68,68,0.08)",
   },
+  {
+    label: "Camera Grid Matrix",
+    id: "cameras-grid",
+    href: "/?grid=true",
+    shortcut: "C",
+    badge: "Multi",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="9" height="9" rx="2"/>
+        <rect x="13" y="2" width="9" height="9" rx="2"/>
+        <rect x="2" y="13" width="9" height="9" rx="2"/>
+        <rect x="13" y="13" width="9" height="9" rx="2"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #06b6d4, #3b82f6)",
+    activeColor: "#06b6d4",
+    activeBg: "rgba(6,182,212,0.08)",
+  },
+  {
+    label: "Manage SDK",
+    id: "manage-sdk",
+    href: "/sdk",
+    shortcut: "S",
+    badge: "SDK",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+    activeColor: "#0ea5e9",
+    activeBg: "rgba(14,165,233,0.08)",
+  },
 ];
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
@@ -124,6 +195,9 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   if (pathname === "/dashboard") activeId = "dashboard";
   else if (pathname === "/visitors") activeId = "visitors";
   else if (pathname === "/employees") activeId = "employees";
+  else if (pathname === "/departments") activeId = "departments";
+  else if (pathname === "/cameras") activeId = "cameras";
+  else if (pathname === "/public-api") activeId = "public-api";
   else if (pathname === "/") activeId = searchParams.get("tab") || "register";
 
   const filtered = NAV_ITEMS.filter(i =>
@@ -137,7 +211,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           transition: all 0.18s ease;
         }
         .sidebar-nav-item:hover {
-          background: #f3f4f6 !important;
+          background: #eef0f6 !important;
           transform: translateX(2px);
         }
         .sidebar-search:focus-within {
@@ -166,30 +240,48 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           background: #ffffff;
           border-right: 1px solid #e5e7eb;
           box-shadow: 1px 0 8px rgba(0,0,0,0.03);
-          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
+
+        /* ── Collapsed rail (desktop only) ── */
+        .responsive-sidebar.snt-rail {
+          width: 76px;
+        }
+        .snt-rail .snt-hide-rail { display: none !important; }
+        .snt-rail .snt-navlabel { display: none !important; }
+        .snt-rail .snt-navlink { justify-content: center; padding: 10px 0; }
+        .snt-rail nav { padding: 0 8px; }
 
         @media (max-width: 1024px) {
           .responsive-sidebar {
             transform: ${isOpen ? "translateX(0)" : "translateX(-100%)"};
             box-shadow: ${isOpen ? "4px 0 25px rgba(0,0,0,0.15)" : "none"};
           }
+          .responsive-sidebar,
+          .responsive-sidebar.snt-rail {
+            width: 260px;
+          }
+          .snt-rail .snt-hide-rail { display: revert !important; }
+          .snt-rail .snt-navlabel { display: block !important; }
+          .snt-rail .snt-navlink { justify-content: flex-start; padding: 10px 12px; }
+          .snt-rail nav { padding: 0 10px; }
+          .snt-collapse-btn { display: none !important; }
         }
       `}</style>
 
-      <aside className="responsive-sidebar">
+      <aside className={`responsive-sidebar ${collapsed ? "snt-rail" : ""}`}>
 
         {/* ── Logo + Close Button ── */}
-        <div style={{ padding: "22px 20px 18px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+        <div style={{ padding: collapsed ? "22px 10px 18px" : "22px 20px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexDirection: collapsed ? "column" : "row" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: collapsed ? "center" : "flex-start" }}>
               {/* Shield icon */}
               <div style={{
                 width: 40, height: 40,
                 borderRadius: 12,
                 background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #6366f1 100%)",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 14px rgba(99,102,241,0.35)",
+                boxShadow: "0 4px 14px rgba(99,102,241,0.35), inset 0 0 0 1px rgba(255,255,255,0.15)",
                 flexShrink: 0,
                 position: "relative",
                 overflow: "hidden",
@@ -204,7 +296,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 </svg>
               </div>
 
-              <div>
+              <div className="snt-hide-rail">
                 <div style={{
                   fontWeight: 800,
                   fontSize: 17,
@@ -234,9 +326,37 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               </div>
             </div>
 
+            {/* Collapse Toggle Button (visible on desktop) */}
+            {onToggleCollapse && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="snt-collapse-btn"
+                style={{
+                  background: "#f3f4f6", border: "none",
+                  borderRadius: 8, padding: 6,
+                  color: "#6b7280", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                {collapsed ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6"/>
+                  </svg>
+                )}
+              </button>
+            )}
+
             {/* Mobile close button */}
             {onClose && (
               <button
+                type="button"
                 onClick={onClose}
                 aria-label="Close menu"
                 className="mobile-close-btn"
@@ -255,7 +375,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </div>
 
           {/* Divider */}
-          <div style={{
+          <div className="snt-hide-rail" style={{
             marginTop: 18,
             height: 1,
             background: "#e5e7eb",
@@ -263,7 +383,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         </div>
 
         {/* ── Search ── */}
-        <div style={{ padding: "0 14px 14px" }}>
+        <div className="snt-hide-rail" style={{ padding: "0 14px 14px" }}>
           <div className="sidebar-search" style={{
             display: "flex", alignItems: "center", gap: 10,
             background: "#f9fafb",
@@ -300,7 +420,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         </div>
 
         {/* ── Section label ── */}
-        <div style={{
+        <div className="snt-hide-rail" style={{
           padding: "0 20px 8px",
           fontSize: 9,
           letterSpacing: "0.14em",
@@ -324,6 +444,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 onClick={onClose}
                 onMouseEnter={() => setHoveredId(item.id)}
                 onMouseLeave={() => setHoveredId(null)}
+                title={collapsed ? item.label : undefined}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -343,7 +464,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                     : "1px solid transparent",
                   transform: "translateX(0)",
                 }}
-                className="sidebar-nav-item"
+                className="sidebar-nav-item snt-navlink"
               >
                 {/* Active left accent bar */}
                 {active && (
@@ -375,11 +496,11 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 </span>
 
                 {/* Label */}
-                <span style={{ flex: 1 }}>{item.label}</span>
+                <span className="snt-navlabel" style={{ flex: 1 }}>{item.label}</span>
 
                 {/* Live badge */}
                 {item.badge && (
-                  <span style={{
+                  <span className="snt-hide-rail" style={{
                     background: "linear-gradient(135deg, #ef4444, #f97316)",
                     color: "#fff",
                     fontSize: 8.5,
@@ -396,7 +517,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
                 {/* Shortcut key hint (on hover) */}
                 {hovered && !active && (
-                  <span style={{
+                  <span className="snt-hide-rail" style={{
                     fontSize: 9, color: "#9ca3af",
                     border: "1px solid #e5e7eb",
                     borderRadius: 4, padding: "1px 5px",
@@ -410,7 +531,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         </nav>
 
         {/* ── System Stats ── */}
-        <div style={{ padding: "10px 14px 0" }}>
+        <div className="snt-hide-rail" style={{ padding: "10px 14px 0" }}>
           <div style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
@@ -433,7 +554,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         </div>
 
         {/* ── Footer ── */}
-        <div style={{
+        <div className="snt-hide-rail" style={{
           padding: "14px 14px 18px",
           borderTop: "1px solid #f3f4f6",
           marginTop: 12,
