@@ -5,6 +5,7 @@ export interface Detection {
   matched: boolean;
   confirmed?: boolean;      // true = presence confirmed (≥2 frames); false/undefined = tentative match
   name: string;
+  id?: string | null;
   confidence: number;
   photo_url?: string | null;
   bbox: [number, number, number, number];

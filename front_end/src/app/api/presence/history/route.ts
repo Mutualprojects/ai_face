@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
     // Fetch paginated history entries
     const { data: logs, error } = await supabase
       .from("face_logs")
-      .select("id, person_id, person_name, camera_id, confidence, snapshot_url, created_at")
+      .select("id, person_id, person_name, camera_id, confidence, snapshot_url, timestamp")
       .eq("person_id", personId)
-      .order("created_at", { ascending: false })
+      .order("timestamp", { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (error) {
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       camera_name: l.camera_id ? cameraMap.get(l.camera_id) || l.camera_id : null,
       confidence: l.confidence,
       snapshot_url: l.snapshot_url || null,
-      created_at: l.created_at,
+      created_at: l.timestamp,
     }));
 
     return NextResponse.json({

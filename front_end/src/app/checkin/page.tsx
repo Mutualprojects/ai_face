@@ -1,22 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   User,
   Phone,
   Building2,
-  CreditCard,
   Camera,
   Upload,
-  PenLine,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Search,
   RotateCcw,
   Loader2,
   ShieldCheck,
   Video,
+  Scissors,
+  RefreshCw,
+  ChevronDown,
+  CreditCard,
 } from "lucide-react";
 
 interface Employee {
@@ -24,6 +24,12 @@ interface Employee {
   name: string;
   department: string;
   photo: string;
+}
+
+interface CameraItem {
+  id: string;
+  name: string;
+  place?: string;
 }
 
 type Purpose = "Meeting" | "Interview" | "Delivery" | "Other";
@@ -44,6 +50,11 @@ const T = {
   textMuted: "#4b5563",
   textFaint: "#9ca3af",
 } as const;
+
+// HLS host — MediaMTX serves HLS on port 8888
+const HLS_BASE = typeof window !== "undefined"
+  ? `${window.location.protocol}//${window.location.hostname}:8888`
+  : "";
 
 export default function PublicCheckInPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -68,16 +79,35 @@ export default function PublicCheckInPage() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
 
-  // Step 3: Verify (Camera & Signature)
+  // Step 3: Photo capture via RTSP cameras
   const [photo, setPhoto] = useState<string | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
-  
+
+  // Camera selector
+  const [cameras, setCameras] = useState<CameraItem[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<CameraItem | null>(null);
+  const [cameraMenuOpen, setCameraMenuOpen] = useState(false);
+  const [camerasLoading, setCamerasLoading] = useState(false);
+
+  // HLS live stream
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<any>(null);
+  const [streamActive, setStreamActive] = useState(false);
+  const [streamError, setStreamError] = useState("");
+  const [streamLoading, setStreamLoading] = useState(false);
+
+  // Capture & crop
+  const [capturedFrame, setCapturedFrame] = useState<string | null>(null);
+  const [cropMode, setCropMode] = useState(false);
+  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cropPreviewRef = useRef<HTMLCanvasElement>(null);
+  const isDragging = useRef(false);
+  const cropStart = useRef({ x: 0, y: 0 });
+  const cropRect = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const frameImgRef = useRef<HTMLImageElement | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -145,58 +175,227 @@ export default function PublicCheckInPage() {
     }
   }, [purpose, latitude, locationLoading, locationError, locationAddress]);
 
-  // Set up camera automatically on step 3
+  // Load cameras when on step 3
   useEffect(() => {
-    if (step === 3 && !photo) {
-      startCamera();
+    if (step === 3) {
+      loadCameras();
     }
-    return () => stopCamera();
-  }, [step, photo]);
+    return () => stopHlsStream();
+  }, [step]);
 
-  async function startCamera() {
+  async function loadCameras() {
+    setCamerasLoading(true);
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-      setStream(s);
-      if (videoRef.current) videoRef.current.srcObject = s;
-      setCameraActive(true);
-      setCameraError(false);
-    } catch (err) {
-      console.error(err);
-      setCameraActive(false);
-      setCameraError(true);
-    }
-  }
-
-  function stopCamera() {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
-      setCameraActive(false);
-    }
-  }
-
-  function handleCapture() {
-    if (cameraActive && videoRef.current) {
-      const video = videoRef.current;
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setPhoto(canvas.toDataURL("image/jpeg"));
-        stopCamera();
+      const res = await fetch("/api/cameras");
+      if (res.ok) {
+        const data = await res.json();
+        setCameras(data || []);
+        if (data && data.length > 0) setSelectedCamera(data[0]);
       }
+    } catch (err) {
+      console.error("Failed to load cameras:", err);
+    } finally {
+      setCamerasLoading(false);
     }
+  }
+
+  async function startHlsStream(cam: CameraItem) {
+    stopHlsStream();
+    setStreamLoading(true);
+    setStreamError("");
+    setStreamActive(false);
+    setCapturedFrame(null);
+    setCropMode(false);
+
+    const hlsUrl = `${HLS_BASE}/${cam.id}/index.m3u8`;
+
+    try {
+      // Dynamically import hls.js to avoid SSR issues
+      const Hls = (await import("hls.js" as any)).default;
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          lowLatencyMode: true,
+          maxBufferLength: 4,
+          maxMaxBufferLength: 8,
+          liveSyncDurationCount: 2,
+          liveMaxLatencyDurationCount: 4,
+        });
+        hlsRef.current = hls;
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(videoRef.current!);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          videoRef.current!.play().catch(() => {});
+          setStreamActive(true);
+          setStreamLoading(false);
+        });
+        hls.on(Hls.Events.ERROR, (_: any, data: any) => {
+          if (data.fatal) {
+            setStreamError("Stream unavailable. Check camera is online.");
+            setStreamLoading(false);
+          }
+        });
+      } else if (videoRef.current!.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari native HLS
+        videoRef.current!.src = hlsUrl;
+        await videoRef.current!.play();
+        setStreamActive(true);
+        setStreamLoading(false);
+      } else {
+        setStreamError("HLS not supported in this browser.");
+        setStreamLoading(false);
+      }
+    } catch (err) {
+      console.error("HLS init error:", err);
+      setStreamError("Failed to start stream.");
+      setStreamLoading(false);
+    }
+  }
+
+  function stopHlsStream() {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.src = "";
+    }
+    setStreamActive(false);
+    setStreamLoading(false);
+  }
+
+  // When user selects a camera, auto-start stream
+  useEffect(() => {
+    if (selectedCamera && step === 3 && !photo) {
+      startHlsStream(selectedCamera);
+    }
+  }, [selectedCamera]);
+
+  function handleCaptureFrame() {
+    if (!videoRef.current || !streamActive) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    setCapturedFrame(dataUrl);
+    stopHlsStream();
+    // Load image for crop
+    const img = new Image();
+    img.onload = () => {
+      frameImgRef.current = img;
+      renderCropCanvas(img, { x: 0, y: 0, w: 0, h: 0 });
+    };
+    img.src = dataUrl;
+    setCropMode(true);
+  }
+
+  function renderCropCanvas(img: HTMLImageElement, rect: { x: number; y: number; w: number; h: number }) {
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    if (rect.w > 4 && rect.h > 4) {
+      // Dark overlay
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Clear crop area
+      ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h, rect.x, rect.y, rect.w, rect.h);
+      // Crop border
+      ctx.strokeStyle = "#6366f1";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    }
+  }
+
+  function getCanvasPos(e: any, canvas: HTMLCanvasElement) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  }
+
+  function onCropMouseDown(e: any) {
+    e.preventDefault();
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const pos = getCanvasPos(e, canvas);
+    cropStart.current = pos;
+    cropRect.current = { x: pos.x, y: pos.y, w: 0, h: 0 };
+    isDragging.current = true;
+  }
+
+  function onCropMouseMove(e: any) {
+    if (!isDragging.current || !frameImgRef.current) return;
+    e.preventDefault();
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const pos = getCanvasPos(e, canvas);
+    const x = Math.min(cropStart.current.x, pos.x);
+    const y = Math.min(cropStart.current.y, pos.y);
+    const w = Math.abs(pos.x - cropStart.current.x);
+    const h = Math.abs(pos.y - cropStart.current.y);
+    cropRect.current = { x, y, w, h };
+    renderCropCanvas(frameImgRef.current, { x, y, w, h });
+  }
+
+  function onCropMouseUp(e: any) {
+    isDragging.current = false;
+    if (frameImgRef.current) {
+      renderCropCanvas(frameImgRef.current, cropRect.current);
+    }
+  }
+
+  function applyCrop() {
+    const { x, y, w, h } = cropRect.current;
+    if (w < 20 || h < 20 || !frameImgRef.current) return;
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(frameImgRef.current, x, y, w, h, 0, 0, w, h);
+    setPhoto(out.toDataURL("image/jpeg", 0.92));
+    setCropMode(false);
+    setCapturedFrame(null);
+  }
+
+  function useFullFrame() {
+    if (capturedFrame) {
+      setPhoto(capturedFrame);
+      setCropMode(false);
+      setCapturedFrame(null);
+    }
+  }
+
+  function retakePicture() {
+    setPhoto(null);
+    setCapturedFrame(null);
+    setCropMode(false);
+    if (selectedCamera) startHlsStream(selectedCamera);
   }
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    stopHlsStream();
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhoto(reader.result as string);
-      stopCamera();
+      setCapturedFrame(null);
+      setCropMode(false);
     };
     reader.readAsDataURL(file);
   }
@@ -664,88 +863,279 @@ export default function PublicCheckInPage() {
 
                 {/* STEP 3: Camera Capture & Signature */}
                 {step === 3 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-                    
-                    {/* Camera */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+                    {/* Photo section */}
                     <div>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.textMuted, letterSpacing: "0.05em", marginBottom: 6 }}>
-                        Webcam Snapshot *
+                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.textMuted, letterSpacing: "0.05em", marginBottom: 8 }}>
+                        Visitor Photo *
                       </label>
-                      <div
-                        style={{
-                          aspectRatio: "4/3",
-                          border: `1px dashed ${T.borderStrong}`,
-                          borderRadius: 12,
-                          background: "#fbfbfe",
-                          overflow: "hidden",
-                          position: "relative",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        {photo ? (
-                          <div style={{ width: "100%", height: "100%", position: "relative" }}>
-                            <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+
+                      {/* Camera selector row */}
+                      {!photo && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                          <div style={{ position: "relative", flex: 1 }}>
                             <button
                               type="button"
-                              onClick={() => {
-                                setPhoto(null);
-                                startCamera();
-                              }}
+                              onClick={() => setCameraMenuOpen(o => !o)}
                               style={{
-                                position: "absolute",
-                                top: 8,
-                                right: 8,
-                                background: "rgba(0,0,0,0.6)",
-                                border: "none",
-                                borderRadius: 6,
-                                color: "#fff",
-                                padding: "4px 8px",
-                                fontSize: 10.5,
-                                cursor: "pointer",
+                                width: "100%", display: "flex", alignItems: "center", gap: 8,
+                                background: T.bgField, border: `1px solid ${T.border}`, borderRadius: 10,
+                                padding: "9px 12px", fontSize: 12.5, color: T.text, cursor: "pointer",
                               }}
                             >
-                              Retake
+                              <Video size={14} style={{ color: T.accent, flexShrink: 0 }} />
+                              <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {camerasLoading ? "Loading cameras..." : selectedCamera ? `${selectedCamera.name}${selectedCamera.place ? " — " + selectedCamera.place : ""}` : "Select a camera"}
+                              </span>
+                              <ChevronDown size={14} style={{ color: T.textFaint, flexShrink: 0 }} />
                             </button>
+                            {cameraMenuOpen && cameras.length > 0 && (
+                              <div style={{
+                                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                                background: T.bgPanel, border: `1px solid ${T.border}`, borderRadius: 10,
+                                boxShadow: "0 8px 24px rgba(0,0,0,0.12)", marginTop: 4, maxHeight: 180, overflowY: "auto",
+                              }}>
+                                {cameras.map(cam => (
+                                  <button
+                                    key={cam.id}
+                                    type="button"
+                                    onClick={() => { setSelectedCamera(cam); setCameraMenuOpen(false); }}
+                                    style={{
+                                      width: "100%", display: "flex", alignItems: "center", gap: 8,
+                                      padding: "9px 12px", background: selectedCamera?.id === cam.id ? T.accentGlow : "transparent",
+                                      border: "none", borderBottom: `1px solid ${T.border}`, cursor: "pointer",
+                                      fontSize: 12.5, color: T.text, textAlign: "left",
+                                    }}
+                                  >
+                                    <Video size={12} style={{ color: T.accent, flexShrink: 0 }} />
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontWeight: 600 }}>{cam.name}</div>
+                                      {cam.place && <div style={{ fontSize: 10.5, color: T.textFaint }}>{cam.place}</div>}
+                                    </div>
+                                    {selectedCamera?.id === cam.id && <Check size={12} style={{ color: T.accent }} />}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        ) : cameraActive ? (
-                          <div style={{ width: "100%", height: "100%", position: "relative" }}>
-                            <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          {selectedCamera && (
                             <button
                               type="button"
-                              onClick={handleCapture}
+                              onClick={() => selectedCamera && startHlsStream(selectedCamera)}
+                              title="Retry stream"
                               style={{
-                                position: "absolute",
-                                bottom: 8,
-                                left: "50%",
-                                transform: "translateX(-50%)",
-                                background: T.accent,
-                                color: "#fff",
-                                border: "none",
-                                borderRadius: 6,
-                                padding: "6px 12px",
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: "pointer",
+                                padding: "9px 10px", background: T.bgField, border: `1px solid ${T.border}`,
+                                borderRadius: 10, cursor: "pointer", color: T.accent, display: "flex", alignItems: "center",
                               }}
                             >
-                              Take Photo
+                              <RefreshCw size={14} />
                             </button>
-                          </div>
-                        ) : (
-                          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10 }}>
-                            <Camera size={24} style={{ margin: "0 auto", opacity: 0.3 }} />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Camera view area */}
+                      <div style={{
+                        aspectRatio: "16/9", background: "#0a0a0f", borderRadius: 12, overflow: "hidden",
+                        border: `1px solid ${T.border}`, position: "relative",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+
+                        {/* Photo captured and accepted */}
+                        {photo && (
+                          <div style={{ width: "100%", height: "100%", position: "relative" }}>
+                            <img src={photo} alt="visitor" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             <button
                               type="button"
-                              onClick={startCamera}
-                              style={{ background: "transparent", border: "none", color: T.accent, fontSize: 11.5, cursor: "pointer", fontWeight: 700 }}
+                              onClick={retakePicture}
+                              style={{
+                                position: "absolute", top: 8, right: 8,
+                                background: "rgba(0,0,0,0.65)", border: "none", borderRadius: 8,
+                                color: "#fff", padding: "5px 10px", fontSize: 11, cursor: "pointer",
+                                display: "flex", alignItems: "center", gap: 4,
+                              }}
                             >
-                              Enable Camera
+                              <RotateCcw size={11} /> Retake
                             </button>
+                            <div style={{
+                              position: "absolute", bottom: 8, left: 8,
+                              background: "rgba(16,185,129,0.9)", borderRadius: 6,
+                              color: "#fff", padding: "4px 8px", fontSize: 10.5, fontWeight: 700,
+                              display: "flex", alignItems: "center", gap: 4,
+                            }}>
+                              <Check size={10} /> Photo Ready
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Crop mode */}
+                        {!photo && cropMode && capturedFrame && (
+                          <div style={{ width: "100%", height: "100%", position: "relative", userSelect: "none" }}>
+                            <canvas
+                              ref={cropCanvasRef}
+                              onMouseDown={onCropMouseDown}
+                              onMouseMove={onCropMouseMove}
+                              onMouseUp={onCropMouseUp}
+                              onTouchStart={onCropMouseDown}
+                              onTouchMove={onCropMouseMove}
+                              onTouchEnd={onCropMouseUp}
+                              style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "crosshair", display: "block" }}
+                            />
+                            {/* Crop instruction */}
+                            <div style={{
+                              position: "absolute", top: 8, left: 8, right: 8,
+                              background: "rgba(0,0,0,0.65)", borderRadius: 8, padding: "6px 10px",
+                              color: "#fff", fontSize: 11, fontWeight: 600, textAlign: "center",
+                            }}>
+                              <Scissors size={11} style={{ display: "inline", marginRight: 5 }} />
+                              Drag to select the face area — then click Apply Crop
+                            </div>
+                            <div style={{
+                              position: "absolute", bottom: 8, left: 8, right: 8,
+                              display: "flex", gap: 8, justifyContent: "center",
+                            }}>
+                              <button
+                                type="button"
+                                onClick={applyCrop}
+                                style={{
+                                  background: T.accent, color: "#fff", border: "none",
+                                  borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                  display: "flex", alignItems: "center", gap: 5,
+                                }}
+                              >
+                                <Scissors size={12} /> Apply Crop
+                              </button>
+                              <button
+                                type="button"
+                                onClick={useFullFrame}
+                                style={{
+                                  background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)",
+                                  borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                }}
+                              >
+                                Use Full Frame
+                              </button>
+                              <button
+                                type="button"
+                                onClick={retakePicture}
+                                style={{
+                                  background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)",
+                                  borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                }}
+                              >
+                                Retake
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* HLS live stream */}
+                        {!photo && !cropMode && (
+                          <div style={{ width: "100%", height: "100%", position: "relative" }}>
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              style={{ width: "100%", height: "100%", objectFit: "cover", display: streamActive ? "block" : "none" }}
+                            />
+                            {/* Loading overlay */}
+                            {streamLoading && (
+                              <div style={{
+                                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                                alignItems: "center", justifyContent: "center", gap: 10, color: "#fff",
+                              }}>
+                                <Loader2 size={28} style={{ animation: "spin 1s linear infinite", opacity: 0.7 }} />
+                                <span style={{ fontSize: 12, opacity: 0.6 }}>Connecting to camera...</span>
+                              </div>
+                            )}
+                            {/* Error overlay */}
+                            {!streamLoading && streamError && (
+                              <div style={{
+                                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                                alignItems: "center", justifyContent: "center", gap: 12, color: "#fff", padding: 20,
+                              }}>
+                                <Camera size={28} style={{ opacity: 0.3 }} />
+                                <span style={{ fontSize: 12, opacity: 0.6, textAlign: "center" }}>{streamError}</span>
+                                {selectedCamera && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startHlsStream(selectedCamera)}
+                                    style={{
+                                      background: T.accent, color: "#fff", border: "none",
+                                      borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                    }}
+                                  >
+                                    Retry
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {/* No camera selected */}
+                            {!streamLoading && !streamError && !streamActive && !selectedCamera && (
+                              <div style={{
+                                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                                alignItems: "center", justifyContent: "center", gap: 8, color: "#fff",
+                              }}>
+                                <Video size={28} style={{ opacity: 0.3 }} />
+                                <span style={{ fontSize: 12, opacity: 0.5 }}>Select a camera above to start live view</span>
+                              </div>
+                            )}
+                            {/* Capture button */}
+                            {streamActive && (
+                              <>
+                                <div style={{
+                                  position: "absolute", top: 8, left: 8,
+                                  background: "rgba(239,68,68,0.85)", borderRadius: 6,
+                                  padding: "3px 8px", color: "#fff", fontSize: 10, fontWeight: 800,
+                                  letterSpacing: "0.1em", display: "flex", alignItems: "center", gap: 4,
+                                }}>
+                                  <span style={{ width: 6, height: 6, background: "#fff", borderRadius: "50%", display: "inline-block" }} />
+                                  LIVE
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleCaptureFrame}
+                                  style={{
+                                    position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
+                                    background: "rgba(255,255,255,0.95)", border: "none", borderRadius: 10,
+                                    padding: "8px 20px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                                    color: T.accent, display: "flex", alignItems: "center", gap: 6,
+                                    boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+                                  }}
+                                >
+                                  <Camera size={14} /> Capture & Crop
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
+
+                      {/* File upload alternative */}
+                      {!photo && !cropMode && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                          <div style={{ flex: 1, height: 1, background: T.border }} />
+                          <span style={{ fontSize: 11, color: T.textFaint }}>or</span>
+                          <div style={{ flex: 1, height: 1, background: T.border }} />
+                        </div>
+                      )}
+                      {!photo && !cropMode && (
+                        <button
+                          type="button"
+                          onClick={() => fileRef.current?.click()}
+                          style={{
+                            width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                            background: T.bgField, border: `1px dashed ${T.borderStrong}`,
+                            borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 600,
+                            color: T.textMuted, cursor: "pointer",
+                          }}
+                        >
+                          <Upload size={14} /> Upload Photo Instead
+                        </button>
+                      )}
+                      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileUpload} />
                     </div>
 
                     {/* Signature */}
@@ -755,7 +1145,7 @@ export default function PublicCheckInPage() {
                       </label>
                       <div
                         style={{
-                          aspectRatio: "4/3",
+                          aspectRatio: "6/2",
                           border: `1px dashed ${T.borderStrong}`,
                           borderRadius: 12,
                           background: "#ffffff",
@@ -764,8 +1154,8 @@ export default function PublicCheckInPage() {
                       >
                         <canvas
                           ref={canvasRef}
-                          width={220}
-                          height={165}
+                          width={600}
+                          height={200}
                           onMouseDown={startDrawing}
                           onMouseMove={draw}
                           onMouseUp={stopDrawing}

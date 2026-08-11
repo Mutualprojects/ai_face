@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -92,6 +92,21 @@ const NAV_ITEMS = [
     activeBg: "rgba(16,185,129,0.08)",
   },
   {
+    label: "Recognition Control",
+    id: "faces",
+    href: "/faces",
+    shortcut: "F",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #059669, #10b981)",
+    activeColor: "#059669",
+    activeBg: "rgba(5,150,105,0.08)",
+  },
+  {
     label: "Register Visitor",
     id: "visitors",
     href: "/visitors",
@@ -176,6 +191,24 @@ const NAV_ITEMS = [
     activeColor: "#0ea5e9",
     activeBg: "rgba(14,165,233,0.08)",
   },
+  {
+    label: "Analytics",
+    id: "analytics",
+    href: "/analytics",
+    shortcut: "A",
+    badge: "New",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+        <line x1="2" y1="20" x2="22" y2="20"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #8b5cf6, #ec4899)",
+    activeColor: "#8b5cf6",
+    activeBg: "rgba(139,92,246,0.08)",
+  },
 ];
 
 interface SidebarProps {
@@ -194,11 +227,40 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
   let activeId = "dashboard";
   if (pathname === "/dashboard") activeId = "dashboard";
   else if (pathname === "/visitors") activeId = "visitors";
+  else if (pathname === "/faces") activeId = "faces";
   else if (pathname === "/employees") activeId = "employees";
   else if (pathname === "/departments") activeId = "departments";
   else if (pathname === "/cameras") activeId = "cameras";
+  else if (pathname === "/analytics") activeId = "analytics";
+  else if (pathname === "/sdk") activeId = "manage-sdk";
   else if (pathname === "/public-api") activeId = "public-api";
   else if (pathname === "/") activeId = searchParams.get("tab") || "register";
+
+  // ── DB size stats ──────────────────────────────────────
+  const [dbStats, setDbStats] = useState<{ faces: number; logs: number; cameras: number; sizeMB: number } | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [fRes, lRes, cRes] = await Promise.allSettled([
+          fetch("http://localhost:5000/api/registered_faces", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
+          fetch("http://localhost:5000/api/face_logs?limit=1", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
+          fetch("http://localhost:5000/api/cameras", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
+        ]);
+        const faces = fRes.status === "fulfilled" && fRes.value.ok ? (await fRes.value.json()).length || 0 : 0;
+        const cams = cRes.status === "fulfilled" && cRes.value.ok ? (await cRes.value.json()).length || 0 : 0;
+        // Get total log count from a separate query
+        const lCountRes = await fetch("http://localhost:5000/api/face_logs?limit=9999", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } });
+        const lData = lCountRes.ok ? await lCountRes.json() : [];
+        const logs = Array.isArray(lData) ? lData.length : (lData.logs?.length || 0);
+        const sizeMB = (faces * 2 + logs * 30) / 1024 + 0.5;
+        setDbStats({ faces, logs, cameras: cams, sizeMB });
+      } catch {}
+    };
+    fetchStats();
+    const iv = setInterval(fetchStats, 30000);
+    return () => clearInterval(iv);
+  }, []);
 
   const filtered = NAV_ITEMS.filter(i =>
     i.label.toLowerCase().includes(search.toLowerCase())
@@ -530,26 +592,40 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
           })}
         </nav>
 
-        {/* ── System Stats ── */}
+        {/* ── DB Size Widget ── */}
         <div className="snt-hide-rail" style={{ padding: "10px 14px 0" }}>
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
+            background: "linear-gradient(135deg, #f5f3ff, #ede9fe)",
+            border: "1px solid #ddd6fe",
+            borderRadius: 12, padding: "10px 12px",
           }}>
-            {[
-              { label: "CPU", value: "12%", color: "#10b981" },
-              { label: "Latency", value: "23ms", color: "#6366f1" },
-            ].map(stat => (
-              <div key={stat.label} style={{
-                background: "#f9fafb",
-                border: "1px solid #e5e7eb",
-                borderRadius: 10, padding: "8px 10px",
-              }}>
-                <div style={{ fontSize: 9, color: "#9ca3af", letterSpacing: "0.1em", textTransform: "uppercase" as const, fontWeight: 600 }}>{stat.label}</div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: stat.color, marginTop: 2, letterSpacing: "-0.03em" }}>{stat.value}</div>
-              </div>
-            ))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: "#7c3aed", letterSpacing: "0.12em", textTransform: "uppercase" as const, fontWeight: 700 }}>Database</div>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+              </svg>
+            </div>
+            {dbStats ? (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#4c1d95", letterSpacing: "-0.04em", lineHeight: 1 }}>
+                  {dbStats.sizeMB < 1024 ? `${dbStats.sizeMB.toFixed(1)} MB` : `${(dbStats.sizeMB / 1024).toFixed(2)} GB`}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
+                  {[
+                    { label: "Faces", value: dbStats.faces, color: "#7c3aed" },
+                    { label: "Logs", value: dbStats.logs, color: "#6366f1" },
+                    { label: "Cams", value: dbStats.cameras, color: "#2563eb" },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: "rgba(255,255,255,0.6)", borderRadius: 7, padding: "5px 6px", textAlign: "center" as const }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: s.color }}>{s.value}</div>
+                      <div style={{ fontSize: 8.5, color: "#7c3aed", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: "#7c3aed", opacity: 0.6 }}>Loading...</div>
+            )}
           </div>
         </div>
 

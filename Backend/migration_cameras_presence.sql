@@ -37,3 +37,18 @@ CREATE INDEX IF NOT EXISTS idx_face_logs_created_at ON public.face_logs (created
 CREATE INDEX IF NOT EXISTS idx_face_logs_person_id ON public.face_logs (person_id);
 CREATE INDEX IF NOT EXISTS idx_face_logs_camera_id ON public.face_logs (camera_id);
 CREATE INDEX IF NOT EXISTS idx_face_logs_person_created ON public.face_logs (person_id, created_at DESC);
+
+-- 4. Add screen_zones column for TV/screen face suppression
+-- Stores normalised exclusion rectangles as JSONB, e.g.:
+--   '[{"x1":0.30,"y1":0.00,"x2":0.65,"y2":0.40}]'
+-- Any face whose bounding-box centre falls inside a zone is silently
+-- discarded by the camera inference worker, preventing TV-screen detections.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'cameras' AND column_name = 'screen_zones'
+    ) THEN
+        ALTER TABLE public.cameras ADD COLUMN screen_zones JSONB DEFAULT '[]'::jsonb;
+    END IF;
+END $$;

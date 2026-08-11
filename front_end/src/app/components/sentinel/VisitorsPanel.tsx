@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import Hls from "hls.js";
 import {
   User, Phone, Building2, CreditCard, Camera, Upload, PenLine,
   Check, ChevronLeft, ChevronRight, Search, RotateCcw, Loader2,
-  LayoutGrid, List, Kanban, Table, Filter, Clock, CheckCircle2, UserX, X
+  LayoutGrid, List, Kanban, Table, Filter, Clock, CheckCircle2, UserX, X,
+  Video, Scissors, RefreshCw, ChevronDown, Image as ImageIcon
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -13,6 +15,7 @@ interface Props {
   onSuccess: () => void;
   canCapture?: boolean;
   captureFrame?: () => string | null;
+  pendingCrop?: string | null;
 }
 
 interface Employee {
@@ -48,6 +51,7 @@ interface VisitorRecord {
   purpose_of_visit: Purpose | string;
   check_in_time: string;
   check_out_time: string | null;
+  is_active?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,7 +123,7 @@ const CornerMarker = ({ position }: { position: "tl" | "tr" | "bl" | "br" }) => 
   return <div style={style} />;
 };
 
-export default function VisitorsPanel({ onSuccess, canCapture = false, captureFrame }: Props) {
+export default function VisitorsPanel({ onSuccess, canCapture = false, captureFrame, pendingCrop = null }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [badgeNo, setBadgeNo] = useState<string>("");
   const [registeredEmployees, setRegisteredEmployees] = useState<Employee[]>([]);
@@ -147,6 +151,31 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     }
   };
 
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
+
+  const handleToggleActive = async (v: VisitorRecord) => {
+    const target = !v.is_active;
+    setTogglingActiveId(v.visitor_id);
+    try {
+      const res = await fetch(`/api/visitors/${v.visitor_id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: target }),
+      });
+      if (res.ok) {
+        await loadVisitors();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update visitor status.");
+      }
+    } catch (err) {
+      console.error("Error toggling visitor status:", err);
+      alert("Network error while updating visitor status.");
+    } finally {
+      setTogglingActiveId(null);
+    }
+  };
+
   // Step 1
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -158,7 +187,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
 
-  // Step 3
+  // Step 3 Photo & Camera State
   const [photo, setPhoto] = useState<string | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -170,6 +199,28 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(false);
 
+  // Camera Source & Crop States
+  type CameraMode = "webcam" | "rtsp" | "upload";
+  const [cameraMode, setCameraMode] = useState<CameraMode>("rtsp");
+  const [rtspCameras, setRtspCameras] = useState<{ id: string; name: string; place?: string }[]>([]);
+  const [selectedRtspCam, setSelectedRtspCam] = useState<{ id: string; name: string; place?: string } | null>(null);
+  const [readySet, setReadySet] = useState<Set<string>>(new Set());
+  const [isRtspLoading, setIsRtspLoading] = useState(false);
+  const [rtspError, setRtspError] = useState("");
+  const [ipCamOpen, setIpCamOpen] = useState(false);
+  const [ipCamPreview, setIpCamPreview] = useState<string | null>(null);
+  const [isLiveStreaming, setIsLiveStreaming] = useState(false);
+  const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [capturedRawFrame, setCapturedRawFrame] = useState<string | null>(null);
+  const [isCropMode, setIsCropMode] = useState(false);
+
+  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cropStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const cropRectRef = useRef<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
+  const isDraggingCropRef = useRef<boolean>(false);
+  const frameImgRef = useRef<HTMLImageElement | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkedIn, setCheckedIn] = useState(false);
@@ -178,7 +229,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   const [visitors, setVisitors] = useState<VisitorRecord[]>([]);
   const [viewMode, setViewMode] = useState<"table" | "kanban" | "grid" | "list">("table");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "checked-in" | "checked-out">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "checked-in" | "checked-out" | "active" | "inactive">("all");
   const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose | string>("all");
   const [isFetchingLogs, setIsFetchingLogs] = useState(true);
 
@@ -189,7 +240,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
 
   const handleDeleteVisitor = async (visitorId: string) => {
     if (!confirm("Are you sure you want to completely delete this visitor record? This action cannot be undone.")) return;
-    
+
     setIsDeleting(visitorId);
     try {
       const res = await fetch(`/api/visitors?visitor_id=${visitorId}`, { method: "DELETE" });
@@ -210,7 +261,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingVisitor) return;
-    
+
     setIsSavingEdit(true);
     try {
       const res = await fetch("/api/visitors", {
@@ -294,29 +345,65 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   const isStep2Valid = (): boolean => selectedId !== "";
   const isStep3Valid = (): boolean => photo !== null && hasSignature;
 
-  /* ---------------- camera ---------------- */
-  useEffect(() => {
-    if (step === 3 && !photo && (!captureFrame || !canCapture)) {
-      startCamera();
-    }
-    return () => stopCamera();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, photo, canCapture, captureFrame]);
+  /* ---------------- camera & streaming ---------------- */
 
-  async function startCamera() {
+  const fetchRtspCameras = async () => {
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360 } });
-      setStream(s);
-      if (videoRef.current) videoRef.current.srcObject = s;
-      setCameraActive(true);
-      setCameraError(false);
-    } catch {
-      setCameraActive(false);
-      setCameraError(true);
+      const res = await fetch("/api/cameras");
+      if (res.ok) {
+        const data = await res.json();
+        setRtspCameras(data || []);
+      }
+    } catch (err) {
+      console.error("Error loading RTSP cameras:", err);
+    }
+  };
+
+  // Poll MediaMTX to know which cameras are actually streaming right now,
+  // then auto-select the first ONLINE camera (avoids the "404 / not opening"
+  // issue you get when the first camera in the list is offline).
+  useEffect(() => {
+    let mounted = true;
+    const checkReady = async () => {
+      try {
+        const r = await fetch(`http://${window.location.hostname}:9997/v3/paths/list`);
+        if (r.ok) {
+          const d = await r.json();
+          const ready = new Set<string>(
+            (d.items || []).filter((p: any) => p.ready === true).map((p: any) => p.name as string)
+          );
+          if (mounted) setReadySet(ready);
+        }
+      } catch { }
+    };
+    checkReady();
+    const iv = setInterval(checkReady, 10000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, []);
+
+  // Prefer an online camera when picking the default.
+  useEffect(() => {
+    if (!rtspCameras.length || selectedRtspCam) return;
+    if (readySet.size) {
+      const online = rtspCameras.find(c => readySet.has(c.id));
+      setSelectedRtspCam(online || rtspCameras[0]);
+    } else {
+      setSelectedRtspCam(rtspCameras[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtspCameras, readySet, selectedRtspCam]);
+
+  function stopHlsStream() {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (videoRef.current && videoRef.current.src && videoRef.current.src.includes("blob:")) {
+      videoRef.current.pause();
     }
   }
 
-  function stopCamera() {
+  function stopWebcam() {
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
       setStream(null);
@@ -324,31 +411,343 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     }
   }
 
-  function handleCaptureFromStream() {
-    if (captureFrame) {
-      const f = captureFrame();
-      if (f) {
-        setPhoto(f);
-        setError("");
-      } else {
-        setError("Live feed frame not ready. Trying local camera...");
-        startCamera();
+  function stopAllStreams() {
+    stopWebcam();
+    stopHlsStream();
+  }
+
+  async function startWebcam() {
+    stopAllStreams();
+    setCameraError(false);
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+      setStream(s);
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
       }
+      setCameraActive(true);
+    } catch (err) {
+      console.warn("Webcam access denied or unavailable:", err);
+      setCameraActive(false);
+      setCameraError(true);
     }
   }
 
-  function handleCapture() {
-    if (cameraActive && videoRef.current) {
-      const video = videoRef.current;
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 480;
-      canvas.height = video.videoHeight || 360;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setPhoto(canvas.toDataURL("image/jpeg"));
-        stopCamera();
+  function startRtspHlsStream(camId: string) {
+    stopAllStreams();
+    setIsRtspLoading(true);
+    setRtspError("");
+    const video = videoRef.current;
+    if (!video) return;
+
+    const hlsUrl = `${window.location.protocol}//${window.location.hostname}:8888/${camId}/index.m3u8`;
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        lowLatencyMode: true,
+        maxBufferLength: 4,
+        liveSyncDurationCount: 2,
+      });
+      hlsRef.current = hls;
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => { });
+        setIsRtspLoading(false);
+      });
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          setRtspError("Camera stream unavailable. Verify camera is online.");
+          setIsRtspLoading(false);
+        }
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = hlsUrl;
+      video.play().catch(() => { });
+      setIsRtspLoading(false);
+    } else {
+      setRtspError("HLS playback is not supported in this browser.");
+      setIsRtspLoading(false);
+    }
+  }
+
+  // Manage streams on step 3 lifecycle
+  useEffect(() => {
+    // Stop any running live polling first
+    if (livePollingRef.current) {
+      clearInterval(livePollingRef.current);
+      livePollingRef.current = null;
+    }
+    setIsLiveStreaming(false);
+
+    if (step === 3 && !photo && !isCropMode) {
+      fetchRtspCameras();
+      if (cameraMode === "webcam") {
+        startWebcam();
       }
+      // IP camera (rtsp) is opened manually via "Open Live Feed" button
+    } else {
+      stopAllStreams();
+    }
+    // Reset IP cam state when mode or camera changes
+    setIpCamOpen(false);
+    setIpCamPreview(null);
+    setRtspError("");
+    return () => {
+      stopAllStreams();
+      if (livePollingRef.current) {
+        clearInterval(livePollingRef.current);
+        livePollingRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, photo, isCropMode, cameraMode, selectedRtspCam?.id]);
+
+
+
+  // Auto-fill from external pending crop if provided
+  useEffect(() => {
+    if (pendingCrop && step === 3) {
+      setPhoto(pendingCrop);
+      setError("");
+    }
+  }, [pendingCrop, step]);
+
+  // Webcam auto-capture (kiosk mode): once the webcam is actually streaming,
+  // snap a centred headshot automatically so the visitor doesn't have to press
+  // a button. Falls back to the manual "Capture Live Feed" button if the
+  // camera can't produce frames.
+  useEffect(() => {
+    if (cameraMode !== "webcam" || !cameraActive || photo || isCropMode || step !== 3) return;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const iv = setInterval(() => {
+      const v = videoRef.current;
+      if (settleTimer) return;
+      if (!v || v.videoWidth < 2 || v.videoHeight < 2) {
+        attempts += 1;
+        if (attempts > 30) clearInterval(iv);
+        return;
+      }
+      settleTimer = setTimeout(() => {
+        clearInterval(iv);
+        const side = Math.min(v.videoWidth, v.videoHeight);
+        const sx = (v.videoWidth - side) / 2;
+        const sy = (v.videoHeight - side) / 2;
+        const c = document.createElement("canvas");
+        c.width = side; c.height = side;
+        const ctx = c.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(v, sx, sy, side, side, 0, 0, side, side);
+          setPhoto(c.toDataURL("image/jpeg", 0.92));
+          stopWebcam();
+        }
+      }, 1000);
+    }, 200);
+    return () => { clearInterval(iv); if (settleTimer) clearTimeout(settleTimer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraMode, cameraActive, photo, isCropMode, step]);
+
+  /* ---------------- capture & crop ---------------- */
+
+  function captureVideoSnapshot() {
+    const video = videoRef.current;
+    if (!video || video.videoWidth < 10) {
+      setError("Camera video stream is not ready.");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+    stopAllStreams();
+    setCapturedRawFrame(dataUrl);
+    setIsCropMode(true);
+    setError("");
+
+    const img = new Image();
+    img.onload = () => {
+      frameImgRef.current = img;
+      const side = Math.min(img.naturalWidth, img.naturalHeight) * 0.6;
+      const cx = (img.naturalWidth - side) / 2;
+      const cy = (img.naturalHeight - side) / 2;
+      const initialRect = { x: cx, y: cy, w: side, h: side };
+      cropRectRef.current = initialRect;
+      renderCropCanvas(img, initialRect);
+    };
+    img.src = dataUrl;
+  }
+
+  async function captureDirectRtspSnapshot() {
+    if (!selectedRtspCam) return;
+    try {
+      setIsRtspLoading(true);
+      setError("");
+      setRtspError("");
+      const res = await fetch(`/api/cameras/${selectedRtspCam.id}/snapshot_direct`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to capture snapshot");
+      }
+      stopAllStreams();
+      setCapturedRawFrame(data.image);
+      setIsCropMode(true);
+
+      const img = new Image();
+      img.onload = () => {
+        frameImgRef.current = img;
+        const side = Math.min(img.naturalWidth, img.naturalHeight) * 0.6;
+        const cx = (img.naturalWidth - side) / 2;
+        const cy = (img.naturalHeight - side) / 2;
+        const initialRect = { x: cx, y: cy, w: side, h: side };
+        cropRectRef.current = initialRect;
+        renderCropCanvas(img, initialRect);
+      };
+      img.src = data.image;
+    } catch (err: any) {
+      setRtspError(err.message || "Could not fetch snapshot from IP Camera.");
+    } finally {
+      setIsRtspLoading(false);
+    }
+  }
+
+  function handleFileChangeCrop(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    stopAllStreams();
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setCapturedRawFrame(dataUrl);
+      setIsCropMode(true);
+      setError("");
+
+      const img = new Image();
+      img.onload = () => {
+        frameImgRef.current = img;
+        const side = Math.min(img.naturalWidth, img.naturalHeight) * 0.6;
+        const cx = (img.naturalWidth - side) / 2;
+        const cy = (img.naturalHeight - side) / 2;
+        const initialRect = { x: cx, y: cy, w: side, h: side };
+        cropRectRef.current = initialRect;
+        renderCropCanvas(img, initialRect);
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function renderCropCanvas(img: HTMLImageElement, rect: { x: number; y: number; w: number; h: number }) {
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+
+    // Draw base raw image
+    ctx.drawImage(img, 0, 0);
+
+    if (rect.w > 4 && rect.h > 4) {
+      // Dark overlay outside rectangle
+      ctx.fillStyle = "rgba(15, 23, 42, 0.55)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Clear inside rectangle & redraw crisp section
+      ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h, rect.x, rect.y, rect.w, rect.h);
+
+      // Draw indigo border
+      ctx.strokeStyle = "#4F46E5";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+
+      // Corner handles
+      const dotSize = 10;
+      ctx.fillStyle = "#4F46E5";
+      ctx.fillRect(rect.x - dotSize / 2, rect.y - dotSize / 2, dotSize, dotSize);
+      ctx.fillRect(rect.x + rect.w - dotSize / 2, rect.y - dotSize / 2, dotSize, dotSize);
+      ctx.fillRect(rect.x - dotSize / 2, rect.y + rect.h - dotSize / 2, dotSize, dotSize);
+      ctx.fillRect(rect.x + rect.w - dotSize / 2, rect.y + rect.h - dotSize / 2, dotSize, dotSize);
+    }
+  }
+
+  function getCropPointerPos(e: any, canvas: HTMLCanvasElement) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  }
+
+  function handleCropPointerDown(e: any) {
+    const canvas = cropCanvasRef.current;
+    if (!canvas || !frameImgRef.current) return;
+    const pos = getCropPointerPos(e, canvas);
+    cropStartRef.current = pos;
+    cropRectRef.current = { x: pos.x, y: pos.y, w: 0, h: 0 };
+    isDraggingCropRef.current = true;
+  }
+
+  function handleCropPointerMove(e: any) {
+    if (!isDraggingCropRef.current || !cropCanvasRef.current || !frameImgRef.current) return;
+    const canvas = cropCanvasRef.current;
+    const pos = getCropPointerPos(e, canvas);
+    const x = Math.min(cropStartRef.current.x, pos.x);
+    const y = Math.min(cropStartRef.current.y, pos.y);
+    const w = Math.abs(pos.x - cropStartRef.current.x);
+    const h = Math.abs(pos.y - cropStartRef.current.y);
+    cropRectRef.current = { x, y, w, h };
+    renderCropCanvas(frameImgRef.current, { x, y, w, h });
+  }
+
+  function handleCropPointerUp() {
+    isDraggingCropRef.current = false;
+    if (frameImgRef.current) {
+      renderCropCanvas(frameImgRef.current, cropRectRef.current);
+    }
+  }
+
+  function applyCropSelection() {
+    const { x, y, w, h } = cropRectRef.current;
+    if (w < 15 || h < 15 || !frameImgRef.current) {
+      if (capturedRawFrame) setPhoto(capturedRawFrame);
+      setIsCropMode(false);
+      return;
+    }
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = w;
+    outCanvas.height = h;
+    const ctx = outCanvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(frameImgRef.current, x, y, w, h, 0, 0, w, h);
+    setPhoto(outCanvas.toDataURL("image/jpeg", 0.92));
+    setIsCropMode(false);
+  }
+
+  function useFullFrame() {
+    if (capturedRawFrame) {
+      setPhoto(capturedRawFrame);
+      setIsCropMode(false);
+    }
+  }
+
+  function resetPhotoSelection() {
+    setPhoto(null);
+    setCapturedRawFrame(null);
+    setIsCropMode(false);
+    if (cameraMode === "webcam") {
+      startWebcam();
+    } else if (cameraMode === "rtsp" && selectedRtspCam) {
+      startRtspHlsStream(selectedRtspCam.id);
     }
   }
 
@@ -503,6 +902,8 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     let matchStatus = true;
     if (statusFilter === "checked-in") matchStatus = !v.check_out_time;
     if (statusFilter === "checked-out") matchStatus = !!v.check_out_time;
+    if (statusFilter === "active") matchStatus = v.is_active !== false;
+    if (statusFilter === "inactive") matchStatus = v.is_active === false;
 
     let matchPurpose = true;
     if (purposeFilter !== "all") matchPurpose = v.purpose_of_visit === purposeFilter;
@@ -533,12 +934,14 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as any)}
-          style={{ ...select, width: 140 }}
+          style={{ ...select, width: 150 }}
           className="vr-select"
         >
           <option value="all">All Status</option>
           <option value="checked-in">Checked In</option>
           <option value="checked-out">Checked Out</option>
+          <option value="active">Recognition Active</option>
+          <option value="inactive">Recognition Off</option>
         </select>
         <select
           value={purposeFilter}
@@ -584,6 +987,24 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
 
   const renderActionButtons = (v: VisitorRecord) => (
     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <button
+        onClick={() => handleToggleActive(v)}
+        disabled={togglingActiveId === v.visitor_id}
+        title={v.is_active !== false ? "Click to stop recognition" : "Click to enable recognition"}
+        className="vr-btn"
+        style={{
+          padding: "4px 10px",
+          background: v.is_active !== false ? "rgba(5, 150, 105, 0.1)" : "rgba(239, 68, 68, 0.08)",
+          border: `1px solid ${v.is_active !== false ? "rgba(5,150,105,0.25)" : "rgba(239,68,68,0.25)"}`,
+          borderRadius: 6,
+          color: v.is_active !== false ? "#059669" : "#ef4444",
+          fontSize: 11, fontWeight: 700, cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: 4,
+        }}
+      >
+        {togglingActiveId === v.visitor_id ? <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} /> : null}
+        {v.is_active !== false ? "Active" : "Inactive"}
+      </button>
       {!v.check_out_time ? (
         <button
           onClick={() => handleCheckout(v.visitor_id)}
@@ -603,7 +1024,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
           Out: {new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       )}
-      <button 
+      <button
         onClick={() => setEditingVisitor(v)}
         className="vr-btn"
         title="Edit Visitor"
@@ -611,7 +1032,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
       >
         <PenLine size={13} />
       </button>
-      <button 
+      <button
         onClick={() => handleDeleteVisitor(v.visitor_id)}
         disabled={isDeleting === v.visitor_id}
         className="vr-btn"
@@ -992,50 +1413,247 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
               {step === 3 && (
                 <div className="vr-fade" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <Field label="Photo" required>
-                    <div style={{
-                      aspectRatio: "4/3", borderRadius: 12, overflow: "hidden", background: T.bgField,
-                      border: `1px dashed ${T.lineStrong}`, position: "relative",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                       {photo ? (
                         <>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={photo} alt="Visitor" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          <button className="vr-btn" onClick={() => setPhoto(null)} style={chip}><RotateCcw size={12} /> Retake</button>
+                          <div style={{
+                            width: 180, height: 180, borderRadius: "50%", overflow: "hidden",
+                            background: T.bgField, border: `2.5px solid ${T.accent}`,
+                            boxShadow: "0 12px 28px rgba(79,70,229,0.18)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={photo} alt="Visitor" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          </div>
+                          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                            <button className="vr-btn" onClick={() => setPhoto(null)} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                              <RotateCcw size={13} /> Retake
+                            </button>
+                            <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                              <Upload size={13} /> Upload Photo
+                            </button>
+                          </div>
                         </>
                       ) : (
                         <>
-                          <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: cameraActive ? "block" : "none" }} />
-                          {!cameraActive && (
-                            <div style={{ textAlign: "center", padding: 12 }}>
-                              <p style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>
-                                {captureFrame && canCapture
-                                  ? "Capture from live feed or upload a photo."
-                                  : cameraError
-                                    ? "Camera unavailable — upload a photo instead."
-                                    : "Starting camera…"}
-                              </p>
+                          <div style={{ display: "flex", gap: 10, width: "100%", justifyContent: "center", marginBottom: 12 }}>
+                            <select
+                              value={cameraMode}
+                              onChange={(e) => setCameraMode(e.target.value as CameraMode)}
+                              style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${T.line}`, background: T.bgField, color: T.text, fontSize: 13 }}
+                            >
+                              <option value="webcam">Webcam</option>
+                              <option value="rtsp">IP Camera</option>
+                            </select>
+                            {cameraMode === "rtsp" && (
+                              <select
+                                value={selectedRtspCam?.id || ""}
+                                onChange={(e) => {
+                                  const cam = rtspCameras.find(c => c.id === e.target.value);
+                                  if (cam) setSelectedRtspCam(cam);
+                                }}
+                                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${T.line}`, background: T.bgField, color: T.text, fontSize: 13, maxWidth: 150 }}
+                              >
+                                {rtspCameras.map(cam => (
+                                  <option key={cam.id} value={cam.id}>
+                                    {cam.name}{readySet.size && !readySet.has(cam.id) ? " · offline" : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                          {/* ── IP Camera Mode ── */}
+                          {cameraMode === "rtsp" ? ((() => {
+                            // ── helpers (defined inline to close over state setters) ──
+                            const stopLiveFeed = () => {
+                              if (livePollingRef.current) {
+                                clearInterval(livePollingRef.current);
+                                livePollingRef.current = null;
+                              }
+                              setIsLiveStreaming(false);
+                              setIpCamOpen(false);
+                            };
+
+                            const startLiveFeed = async () => {
+                              if (!selectedRtspCam) return;
+                              setRtspError("");
+                              setIsRtspLoading(true);
+                              setIpCamOpen(true);
+                              // Fetch first frame immediately
+                              try {
+                                const res = await fetch(`/api/cameras/${selectedRtspCam.id}/snapshot_direct`);
+                                const data = await res.json();
+                                if (!res.ok || data.error) throw new Error(data.error || "Failed");
+                                setIpCamPreview(data.image);
+                                setIsRtspLoading(false);
+                                setIsLiveStreaming(true);
+                                // Start polling loop ~300 ms
+                                livePollingRef.current = setInterval(async () => {
+                                  try {
+                                    const r = await fetch(`/api/cameras/${selectedRtspCam.id}/snapshot_direct`);
+                                    const d = await r.json();
+                                    if (r.ok && !d.error) setIpCamPreview(d.image);
+                                  } catch { /* silently skip failed frames */ }
+                                }, 300);
+                              } catch (err: any) {
+                                setRtspError(err.message || "Could not open IP camera.");
+                                setIpCamOpen(false);
+                                setIsRtspLoading(false);
+                              }
+                            };
+
+                            const captureCurrentFrame = () => {
+                              if (!ipCamPreview) return;
+                              // Freeze the live feed
+                              stopLiveFeed();
+                              const frameToUse = ipCamPreview;
+                              setIpCamPreview(null);
+                              setCapturedRawFrame(frameToUse);
+                              setIsCropMode(true);
+                              setError("");
+                              const img = new Image();
+                              img.onload = () => {
+                                frameImgRef.current = img;
+                                const side = Math.min(img.naturalWidth, img.naturalHeight) * 0.6;
+                                const cx = (img.naturalWidth - side) / 2;
+                                const cy = (img.naturalHeight - side) / 2;
+                                cropRectRef.current = { x: cx, y: cy, w: side, h: side };
+                                renderCropCanvas(img, { x: cx, y: cy, w: side, h: side });
+                              };
+                              img.src = frameToUse;
+                            };
+
+                            return (
+                              <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+
+                                {/* ── Live Feed Viewer: 40vw × 30vh ── */}
+                                <div style={{
+                                  width: "40vw", height: "30vh", borderRadius: 10, overflow: "hidden",
+                                  background: "#0a0a0a", border: `2px solid ${isLiveStreaming ? T.accent : T.lineStrong}`,
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  position: "relative",
+                                  boxShadow: isLiveStreaming ? `0 0 0 3px ${T.accent}33` : "none",
+                                  transition: "border-color 0.2s, box-shadow 0.2s",
+                                }}>
+                                  {ipCamPreview ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={ipCamPreview}
+                                      alt="Live IP Camera"
+                                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                                    />
+                                  ) : (
+                                    <div style={{ textAlign: "center", padding: 16 }}>
+                                      <Camera size={40} color="#555" style={{ marginBottom: 10 }} />
+                                      <p style={{ fontSize: 13, color: "#888", margin: 0 }}>
+                                        {isRtspLoading
+                                          ? "Connecting to camera…"
+                                          : rtspError
+                                            ? rtspError
+                                            : !selectedRtspCam
+                                              ? "No camera selected"
+                                              : 'Click "Open Live Feed" to start'}
+                                      </p>
+                                      {isRtspLoading && (
+                                        <Loader2 size={22} color={T.accent} style={{ marginTop: 10, animation: "spin 1s linear infinite" }} />
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* LIVE badge */}
+                                  {isLiveStreaming && (
+                                    <div style={{
+                                      position: "absolute", top: 10, left: 10,
+                                      background: "#EF4444", color: "#fff",
+                                      fontSize: 10, fontWeight: 800, letterSpacing: "0.1em",
+                                      padding: "3px 8px", borderRadius: 4,
+                                      display: "flex", alignItems: "center", gap: 5,
+                                    }}>
+                                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff", display: "inline-block", animation: "pulse 1s ease-in-out infinite" }} />
+                                      LIVE
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* ── Controls ── */}
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                                  {!isLiveStreaming ? (
+                                    <button
+                                      className="vr-btn"
+                                      disabled={isRtspLoading || !selectedRtspCam}
+                                      onClick={startLiveFeed}
+                                      style={{ ...btnPrimary, width: "auto", padding: "9px 20px", margin: 0 }}
+                                    >
+                                      <Video size={14} /> {isRtspLoading ? "Connecting…" : "Open Live Feed"}
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        className="vr-btn"
+                                        onClick={captureCurrentFrame}
+                                        style={{ ...btnPrimary, width: "auto", padding: "9px 20px", margin: 0, background: T.ok, borderColor: T.ok }}
+                                      >
+                                        <Camera size={14} /> Capture
+                                      </button>
+                                      <button
+                                        className="vr-btn"
+                                        onClick={stopLiveFeed}
+                                        style={{ ...btnSecondary, width: "auto", padding: "9px 18px", margin: 0 }}
+                                      >
+                                        <X size={14} /> Stop
+                                      </button>
+                                    </>
+                                  )}
+                                  <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                                    <Upload size={13} /> Upload Photo
+                                  </button>
+                                </div>
+
+                                {rtspError && <p style={{ fontSize: 12, color: T.stamp, margin: 0, textAlign: "center" }}>{rtspError}</p>}
+                              </div>
+                            );
+                          })()
+                          ) : (
+                            /* ── Webcam Mode ── */
+                            <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                              <div style={{
+                                width: 180, height: 180, borderRadius: "50%", overflow: "hidden",
+                                background: T.bgField, border: `2px dashed ${T.lineStrong}`,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                position: "relative",
+                              }}>
+                                <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: cameraActive ? "block" : "none" }} />
+                                {!cameraActive && (
+                                  <p style={{ fontSize: 12, color: T.textMuted, margin: 0, padding: 12, textAlign: "center" }}>
+                                    {cameraError ? "Camera unavailable — upload a photo instead." : "Opening camera…"}
+                                  </p>
+                                )}
+                                {cameraActive && (
+                                  <span style={{
+                                    position: "absolute", bottom: 14, fontSize: 10, fontWeight: 700, color: T.accent,
+                                    background: "rgba(255,255,255,0.88)", padding: "3px 10px", borderRadius: 99,
+                                    border: `1px solid ${T.line}`, letterSpacing: "0.06em", textTransform: "uppercase",
+                                  }}>
+                                    Capturing…
+                                  </span>
+                                )}
+                              </div>
                               <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                                {captureFrame && canCapture && (
-                                  <button className="vr-btn" onClick={handleCaptureFromStream} style={{ ...btnPrimary, margin: 0, width: "auto", padding: "8px 16px" }}>
+                                {cameraActive && (
+                                  <button className="vr-btn" onClick={captureVideoSnapshot} style={{ ...btnPrimary, width: "auto", padding: "8px 16px", margin: 0 }}>
                                     <Camera size={13} /> Capture Live Feed
                                   </button>
                                 )}
-                                <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, margin: 0, width: "auto", padding: "8px 16px" }}>
+                                <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
                                   <Upload size={13} /> Upload Photo
                                 </button>
+                                {cameraError && (
+                                  <button className="vr-btn" onClick={startWebcam} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                                    <Camera size={13} /> Retry Camera
+                                  </button>
+                                )}
                               </div>
-                              {captureFrame && (
-                                <p style={{ fontSize: 11, color: T.textFaint, marginTop: 10 }}>
-                                  Or <button onClick={startCamera} style={linkBtn}>start local camera</button>
-                                </p>
-                              )}
                             </div>
-                          )}
-                          {cameraActive && (
-                            <button className="vr-btn" onClick={handleCapture} style={{ ...chip, bottom: 12, top: "auto", background: T.accent, color: "#fff", borderColor: T.accent }}>
-                              <Camera size={13} /> Capture
-                            </button>
                           )}
                         </>
                       )}
@@ -1069,7 +1687,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
                   {error && <p style={{ fontSize: 12.5, color: T.stamp, margin: 0 }}>{error}</p>}
 
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button className="vr-btn" onClick={() => { stopCamera(); setStep(2); }} disabled={loading} style={{ ...btnSecondary, flex: 1, margin: 0 }}>
+                    <button className="vr-btn" onClick={() => { stopAllStreams(); setStep(2); }} disabled={loading} style={{ ...btnSecondary, flex: 1, margin: 0 }}>
                       <ChevronLeft size={15} /> Back
                     </button>
                     <button className="vr-btn" onClick={handleSubmit} disabled={loading || !isStep3Valid()} style={{ ...btnPrimary, flex: 1, opacity: (loading || !isStep3Valid()) ? 0.4 : 1 }}>
@@ -1118,7 +1736,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
               <CornerMarker position="tr" />
               <CornerMarker position="bl" />
               <CornerMarker position="br" />
-              
+
               {photo ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1193,6 +1811,60 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
           </div>
         )}
       </div>
+
+      {/* Crop Modal */}
+      {isCropMode && capturedRawFrame && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(15,23,42,0.7)", zIndex: 2000,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+          backdropFilter: "blur(6px)",
+        }}>
+          <div style={{
+            background: T.bgPanel, borderRadius: 18, width: "100%", maxWidth: 620,
+            overflow: "hidden", boxShadow: "0 25px 60px rgba(0,0,0,0.35)",
+          }}>
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>Crop visitor face</div>
+                <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>
+                  Drag on the photo to draw a square around the face
+                </div>
+              </div>
+              <button onClick={resetPhotoSelection} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", padding: 4 }}><X size={18} /></button>
+            </div>
+
+            <div style={{ padding: 20 }}>
+              <div style={{
+                position: "relative", borderRadius: 12, overflow: "hidden",
+                background: "#05070d", touchAction: "none", userSelect: "none",
+                cursor: "crosshair", maxHeight: 420,
+              }}>
+                <canvas
+                  ref={cropCanvasRef}
+                  onPointerDown={handleCropPointerDown}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerLeave={handleCropPointerUp}
+                  style={{ width: "100%", height: "auto", display: "block", touchAction: "none" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button onClick={resetPhotoSelection} style={{ ...btnSecondary, flex: 1, margin: 0 }}>
+                  <RotateCcw size={14} /> Retake
+                </button>
+                <button onClick={useFullFrame} style={{ ...btnSecondary, flex: 1, margin: 0 }}>
+                  <ImageIcon size={14} /> Use Full Frame
+                </button>
+                <button onClick={applyCropSelection} style={{ ...btnPrimary, flex: 1, margin: 0 }}>
+                  <Scissors size={14} /> Use Crop
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {editingVisitor && (
@@ -1288,11 +1960,5 @@ const btnSecondary: CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
   background: "transparent", color: T.text, border: `1px solid ${T.lineStrong}`, borderRadius: 9,
   padding: "8px 0", fontSize: 13.5, fontWeight: 600, cursor: "pointer", width: "100%", margin: "10px auto 0",
-};
-const chip: CSSProperties = {
-  position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 5,
-  background: "rgba(255,255,255,0.9)", border: `1px solid ${T.line}`, color: T.text,
-  borderRadius: 7, padding: "6px 10px", fontSize: 11.5, cursor: "pointer",
-  backdropFilter: "blur(4px)"
 };
 const linkBtn: CSSProperties = { background: "none", border: "none", color: T.accent, fontSize: 11, cursor: "pointer", padding: 0, textDecoration: "underline" };

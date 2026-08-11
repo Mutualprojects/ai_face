@@ -238,9 +238,14 @@ def fetch_known_faces():
     if supabase is None:
         return []
     try:
-        res = supabase.table("known_faces").select(
-            "id, name, employee_code, department, designation, email, embedding, photo_url"
-        ).execute()
+        try:
+            res = supabase.table("known_faces").select(
+                "id, name, employee_code, department, designation, email, embedding, photo_url"
+            ).eq("is_active", True).execute()
+        except Exception:
+            res = supabase.table("known_faces").select(
+                "id, name, employee_code, department, designation, email, embedding, photo_url"
+            ).execute()
         return res.data or []
     except Exception as e:
         log.error("fetch_known_faces error: %s", e)
@@ -251,9 +256,14 @@ def fetch_visitors():
     if supabase is None:
         return []
     try:
-        res = supabase.table("visitors").select(
-            "visitor_id, full_name, photo_image, embedding"
-        ).execute()
+        try:
+            res = supabase.table("visitors").select(
+                "visitor_id, full_name, photo_image, embedding"
+            ).eq("is_active", True).execute()
+        except Exception:
+            res = supabase.table("visitors").select(
+                "visitor_id, full_name, photo_image, embedding"
+            ).execute()
         visitors = []
         for r in res.data or []:
             if r.get("embedding"):
@@ -265,6 +275,7 @@ def fetch_visitors():
                     "designation": "Visitor",
                     "photo_url": r["photo_image"],
                     "embedding": r["embedding"],
+                    "is_visitor": True,
                 })
         return visitors
     except Exception as e:
@@ -431,6 +442,7 @@ def analyze_frame(img, run_yolo=True):
             "bbox": bbox,
             "crop_b64": crop_b64,
             "det_score": round(det_score, 3),
+            "is_visitor": bool(best_known and best_known.get("is_visitor")),
         })
 
     return detections, bodies
@@ -597,6 +609,10 @@ class DirectCameraWorker:
     def _log_match(self, name, confidence, crop_b64, person_id=None):
         if supabase is None:
             return
+        # Visitors must NOT be written into face_logs.person_id — that column
+        # is a FK into known_faces(id) and the insert would be rejected.
+        if person_id and str(name).lower().startswith("visitor: "):
+            person_id = None
         now = time.time()
         key = person_id or name
         cooldown = Config.LOG_COOLDOWN_UNKNOWN_SEC if person_id is None or name.lower() == "unknown" else Config.LOG_COOLDOWN_KNOWN_SEC

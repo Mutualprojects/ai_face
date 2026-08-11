@@ -174,7 +174,7 @@ export default function SupportModal({ isOpen, onClose, initialTab = "copilot" }
 
     // AI Response Generator Logic
     setTimeout(() => {
-      let botResponse: ChatMessage = {
+      const botResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: "assistant",
         text: "",

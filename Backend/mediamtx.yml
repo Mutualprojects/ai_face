@@ -42,7 +42,7 @@ hlsDirectory: ''
 hlsEncryption: false
 hlsMuxerCloseAfter: 60s
 hlsPartDuration: 100ms
-hlsSegmentCount: 3
+hlsSegmentCount: 7
 hlsSegmentDuration: 500ms
 hlsSegmentMaxSize: 50M
 hlsServerCert: server.crt

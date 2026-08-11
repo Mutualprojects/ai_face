@@ -136,9 +136,14 @@ def fetch_known_faces():
     if db is None:
         return []
     try:
-        res = db.table("known_faces").select(
-            "id, name, employee_code, department, designation, email, embedding, photo_url"
-        ).execute()
+        try:
+            res = db.table("known_faces").select(
+                "id, name, employee_code, department, designation, email, embedding, photo_url"
+            ).eq("is_active", True).execute()
+        except Exception:
+            res = db.table("known_faces").select(
+                "id, name, employee_code, department, designation, email, embedding, photo_url"
+            ).execute()
         return res.data or []
     except Exception as e:
         log.error("fetch_known_faces error: %s", e)
@@ -150,9 +155,14 @@ def fetch_visitors():
     if db is None:
         return []
     try:
-        res = db.table("visitors").select(
-            "visitor_id, full_name, photo_image, embedding"
-        ).execute()
+        try:
+            res = db.table("visitors").select(
+                "visitor_id, full_name, photo_image, embedding"
+            ).eq("is_active", True).execute()
+        except Exception:
+            res = db.table("visitors").select(
+                "visitor_id, full_name, photo_image, embedding"
+            ).execute()
         visitors = []
         for row in res.data or []:
             if row.get("embedding"):

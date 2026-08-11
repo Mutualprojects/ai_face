@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import LoadingScreen from "./LoadingScreen";
 import { AuthProvider, useAuth } from "./AuthProvider";
 
 /* ── Inner layout (reads auth context) ──────────────────────────────────── */
@@ -57,18 +58,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
 
   // Full-screen loading state while checking session
   if (isLoading) {
-    return (
-      <div style={{
-        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#f6f7fb",
-        backgroundImage: "radial-gradient(52rem 36rem at 15% -10%, rgba(99,102,241,0.12) 0%, rgba(99,102,241,0) 55%), radial-gradient(46rem 34rem at 95% 10%, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0) 55%)",
-      }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
-          <div style={{ width: 46, height: 46, borderRadius: "50%", border: "3px solid rgba(99,102,241,0.18)", borderTopColor: "#6366f1", borderRightColor: "#8b5cf6", animation: "spin 0.7s linear infinite", boxShadow: "0 0 24px rgba(99,102,241,0.18)" }} />
-          <p style={{ color: "#64708c", fontSize: 13, margin: 0, letterSpacing: "0.02em" }}>Loading Sentinel AI…</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (isPublicRoute) {

@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
     // Query face_logs for recent detections of enrolled individuals
     const { data: logs, error } = await supabase
       .from("face_logs")
-      .select("id, person_id, person_name, camera_id, confidence, snapshot_url, created_at")
+      .select("id, person_id, person_name, camera_id, confidence, snapshot_url, timestamp")
       .not("person_id", "is", null)
-      .gte("created_at", cutoffDate)
-      .order("created_at", { ascending: false });
+      .gte("timestamp", cutoffDate)
+      .order("timestamp", { ascending: false });
 
     if (error) {
       console.error("Supabase error fetching presence face_logs:", error);
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         department: face?.department || null,
         designation: face?.designation || null,
         photo_url: face?.photo_url || null,
-        last_seen_at: log.created_at,
+        last_seen_at: log.timestamp,
         camera_id: log.camera_id || null,
         camera_name: log.camera_id ? cameraMap.get(log.camera_id) || log.camera_id : null,
         confidence: log.confidence,

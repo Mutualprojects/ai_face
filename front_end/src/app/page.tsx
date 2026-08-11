@@ -23,7 +23,7 @@ function HomeContent() {
     }
   }, [searchParams]);
 
-  const currentTab = (searchParams.get("tab") || "register") as "register" | "gallery" | "log";
+  const currentTab = (searchParams.get("tab") || "register") as "register" | "visitors" | "gallery" | "log";
 
   // Fetch which paths are READY from MediaMTX API
   const fetchReadyCameras = useCallback(async (): Promise<Set<string>> => {

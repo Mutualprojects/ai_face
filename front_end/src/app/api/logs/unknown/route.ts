@@ -26,14 +26,15 @@ export async function GET(request: NextRequest) {
       endDate = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 23, 59, 59, 999));
     }
 
-    // Query face_logs for unknown/unmatched detections
+    // Query face_logs for unknown/unmatched detections.
+    // Visitors are stored with person_id = null, so never match on that.
     const { data: logs, error } = await supabase
       .from("face_logs")
-      .select("id, person_id, person_name, camera_id, confidence, snapshot_url, created_at")
-      .or("person_id.is.null,person_name.eq.Unknown,person_name.eq.unknown")
-      .gte("created_at", startDate.toISOString())
-      .lte("created_at", endDate.toISOString())
-      .order("created_at", { ascending: false });
+      .select("id, person_id, person_name, camera_id, confidence, snapshot_url, timestamp")
+      .or("person_name.eq.Unknown,person_name.eq.unknown")
+      .gte("timestamp", startDate.toISOString())
+      .lte("timestamp", endDate.toISOString())
+      .order("timestamp", { ascending: false });
 
     if (error) {
       console.error("Error fetching unknown face_logs:", error);
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
     const formattedLogs = (logs || []).map((l) => ({
       ...l,
       camera_name: l.camera_id ? cameraMap.get(l.camera_id) || l.camera_id : null,
+      created_at: l.timestamp,
     }));
 
     return NextResponse.json({
@@ -73,10 +75,12 @@ export async function GET(request: NextRequest) {
  */
 export async function DELETE() {
   try {
+    // Delete only true unknown logs. Never match on person_id.is.null —
+    // visitors are stored with person_id = null and must be preserved.
     const { data, error } = await supabase
       .from("face_logs")
       .delete()
-      .or("person_name.eq.Unknown,person_name.eq.unknown,person_id.is.null")
+      .or("person_name.eq.Unknown,person_name.eq.unknown")
       .select();
 
     if (error) {

@@ -92,14 +92,15 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const deleteType = searchParams.get("type") || "unknown";
 
-    let query = supabase.from("face_logs").delete();
+    const query = supabase.from("face_logs").delete();
 
     if (deleteType === "unknown") {
-      // Delete all unknown logs where person_name is Unknown or person_id is null
+      // Delete only true unknown logs. Never match on person_id.is.null —
+      // visitors are stored with person_id = null and must be preserved.
       const { data, error } = await supabase
         .from("face_logs")
         .delete()
-        .or("person_name.eq.Unknown,person_name.eq.unknown,person_id.is.null")
+        .or("person_name.eq.Unknown,person_name.eq.unknown")
         .select();
 
       if (error) {

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ClientLayout from "./components/ClientLayout";
 
@@ -6,12 +6,15 @@ export const metadata: Metadata = {
   title: "Sentinel AI – Live Facial Recognition",
   description: "Advanced zero-latency WebRTC live stream face matcher.",
   applicationName: "Sentinel AI",
-  themeColor: "#6366f1",
   icons: {
     icon: "/avatar_3251713.png",
     shortcut: "/avatar_3251713.png",
     apple: "/avatar_3251713.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#6366f1",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

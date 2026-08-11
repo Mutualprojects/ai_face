@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import {
   UserPlus,
   Users,
+  UserCheck,
   ScrollText,
   Video,
   RefreshCw,
@@ -19,6 +20,7 @@ import {
 import { Detection, RegisteredFace, FaceLog, StreamMode, PlayState } from "./sentinel/types";
 import BoundingBoxes from "./sentinel/BoundingBoxes";
 import RegisterPanel from "./sentinel/RegisterPanel";
+import VisitorsPanel from "./sentinel/VisitorsPanel";
 import GalleryPanel from "./sentinel/GalleryPanel";
 import LogPanel from "./sentinel/LogPanel";
 import ComparisonPanel from "./sentinel/ComparisonPanel";
@@ -36,7 +38,7 @@ function getBackendUrl() {
 interface Props {
   streamName?: string;
   serverPort?: string;
-  initialTab?: "register" | "gallery" | "log";
+  initialTab?: "register" | "visitors" | "gallery" | "log";
   detectionOnly?: boolean;
 }
 
@@ -88,6 +90,8 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   const [vidW, setVidW] = useState(0);
   const [vidH, setVidH] = useState(0);
 
+
+
   // Face matching
   const [matchOn, setMatchOn] = useState(true);
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -95,7 +99,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   const [history, setHistory] = useState<DetectionHistoryItem[]>([]);
 
   // Sidebar tab
-  const [tab, setTab] = useState<"register" | "gallery" | "log">(initialTab);
+  const [tab, setTab] = useState<"register" | "visitors" | "gallery" | "log">(initialTab);
 
   // Keep tab state in sync with initialTab prop changes
   useEffect(() => {
@@ -104,6 +108,9 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
 
   // Pre-filled capture for registration from ComparisonPanel
   const [pendingRegisterCrop, setPendingRegisterCrop] = useState<string | null>(null);
+
+  // Pre-filled capture for VISITOR registration from ComparisonPanel (CC camera)
+  const [pendingVisitorCrop, setPendingVisitorCrop] = useState<string | null>(null);
 
   // Selected detection for popup modal
   const [modalDetection, setModalDetection] = useState<{ det: Detection; cameraName: string } | null>(null);
@@ -193,7 +200,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
         if (d.fatal) { setPS("error"); setErrMsg(d.details); cleanup(); }
       });
     } else { setPS("error"); setErrMsg("HLS not supported."); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [cleanup, streamName]);
 
   // ── WebRTC ────────────────────────────────────────────
@@ -399,7 +406,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
         const now = Date.now();
         if (dets.length > 0) {
           setHistory(prev => {
-            let updated = [...prev];
+            const updated = [...prev];
             dets.forEach(det => {
               const isMatch = det.matched;
               const matchName = det.name;
@@ -465,6 +472,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
 
   const TABS = [
     { id: "register" as const, label: "Register", icon: UserPlus, count: null as number | null },
+    { id: "visitors" as const, label: "Visitors", icon: UserCheck, count: null as number | null },
     { id: "gallery" as const, label: "Gallery", icon: Users, count: faces.length },
     { id: "log" as const, label: "Activity Log", icon: ScrollText, count: null as number | null },
   ];
@@ -562,13 +570,17 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
               {!modalDetection.det.matched && (
                 <button onClick={() => {
                   if (modalDetection.det.crop_b64) {
-                    setPendingRegisterCrop(modalDetection.det.crop_b64);
-                    setCleanView(false);
-                    setTab("register");
+                    if (tab === "visitors") {
+                      setPendingVisitorCrop(modalDetection.det.crop_b64);
+                    } else {
+                      setPendingRegisterCrop(modalDetection.det.crop_b64);
+                      setCleanView(false);
+                      setTab("register");
+                    }
                   }
                   setModalDetection(null);
                 }} className="btn-primary" style={{ flex: 1, padding: "11px 0", fontSize: 12.5 }}>
-                  ➕ Register Face
+                  ➕ {tab === "visitors" ? "Register Visitor" : "Register Face"}
                 </button>
               )}
               <button onClick={() => setModalDetection(null)} className="btn-secondary" style={{ flex: 1, padding: "11px 0", fontSize: 12.5 }}>
@@ -629,22 +641,24 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
             aspectRatio: vidW && vidH ? `${vidW}/${vidH}` : "16/9"
           }}>
 
-            <video ref={videoRef} autoPlay muted playsInline
-              style={{
-                width: "100%", height: "100%", objectFit: "contain", display: "block",
-                opacity: playing ? 1 : 0, transition: "opacity 0.4s"
-              }} />
+            <div className="snt-zoom">
+              <video ref={videoRef} autoPlay muted playsInline
+                style={{
+                  width: "100%", height: "100%", objectFit: "contain", display: "block",
+                  opacity: playing ? 1 : 0, transition: "opacity 0.4s"
+                }} />
 
-            {/* Bounding Boxes overlay with click handler (live video) */}
-            {playing && (
-              <BoundingBoxes
-                detections={detections}
-                bodies={bodies}
-                videoWidth={vidW}
-                videoHeight={vidH}
-                onSelectDetection={(det) => setModalDetection({ det, cameraName: streamName })}
-              />
-            )}
+              {/* Bounding Boxes overlay with click handler (live video) */}
+              {playing && (
+                <BoundingBoxes
+                  detections={detections}
+                  bodies={bodies}
+                  videoWidth={vidW}
+                  videoHeight={vidH}
+                  onSelectDetection={(det) => setModalDetection({ det, cameraName: streamName })}
+                />
+              )}
+            </div>
 
             {/* ── SERVER AI DETECTION VIEW ──
                 Rendered whenever the raw stream can't be decoded by the
@@ -834,6 +848,33 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
                   </div>
                 </div>
               )}
+              {tab === "visitors" && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "stretch", width: "100%" }}>
+                  {/* Left sub-column: Unknown Candidates → auto-detect & prefill visitor photo */}
+                  {detections.filter(d => !d.matched).length > 0 && (
+                    <div style={{ flex: "1 1 300px", minWidth: "260px" }}>
+                      <ComparisonPanel
+                        unknowns={detections.filter(d => !d.matched)}
+                        backendUrl={backendUrl}
+                        onRegisterClick={(crop) => setPendingVisitorCrop(crop)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Right sub-column: Visitor Registration Form (CC camera capture) */}
+                  <div style={{ flex: "2 1 400px" }}>
+                    <VisitorsPanel
+                      canCapture={playing || !!fallbackCrop}
+                      captureFrame={pendingVisitorCrop
+                        ? () => { const c = pendingVisitorCrop; setPendingVisitorCrop(null); return c; }
+                        : () => captureHighResFrame() ?? fallbackCrop
+                      }
+                      pendingCrop={pendingVisitorCrop}
+                      onSuccess={() => { setPendingVisitorCrop(null); }}
+                    />
+                  </div>
+                </div>
+              )}
               {tab === "gallery" && (
                 <GalleryPanel faces={faces} onDelete={deleteFace} />
               )}
@@ -870,6 +911,9 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
           box-shadow:0 10px 34px rgba(15,23,42,0.12), 0 0 0 1px rgba(99,102,241,0.06)}
         .snt-viewport::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;z-index:25;pointer-events:none;
           background:linear-gradient(90deg,transparent,rgba(99,102,241,0.55),rgba(139,92,246,0.45),transparent)}
+
+        .snt-zoom{position:absolute;inset:0;will-change:transform;
+          transition:transform .5s cubic-bezier(.22,1,.36,1)}
 
         .snt-scan{position:absolute;top:0;left:0;right:0;height:2px;z-index:15;pointer-events:none;
           background:linear-gradient(90deg,transparent,#7c3aed,#00ff88,#7c3aed,transparent);
@@ -922,7 +966,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
         /* Sidebar */
         .snt-sidebar{width:100%;max-width:none;display:flex;flex-direction:column;overflow:hidden;
           background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow-md)}
-        .snt-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:10px;background:#f8f9fd;border-bottom:1px solid var(--border)}
+        .snt-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px;background:#f8f9fd;border-bottom:1px solid var(--border)}
         .snt-tab{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 6px;border:none;background:transparent;
           color:var(--text-muted);font-weight:600;font-size:11.5px;cursor:pointer;border-radius:12px;transition:all .18s ease;font-family:inherit;white-space:nowrap}
         .snt-tab:hover{color:var(--violet-deep);background:rgba(99,102,241,0.06)}
