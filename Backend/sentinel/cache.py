@@ -58,16 +58,18 @@ def refresh():
         log.error("Cache refresh error: %s", e)
 
 
-def match(input_embedding, threshold=None, margin=None):
+def match(input_embedding, threshold=None, margin=None, top_n: int = 3):
     """Vectorized cosine match with margin-based rejection.
 
-    Returns (best_face_or_None, best_score, runner_up_score).
+    Returns (best_face_or_None, best_score, runner_up_score, top_candidates)
+    where top_candidates is a list of up to `top_n` {name, score, photo_url}
+    dicts ranked by similarity (the "closest identities" comparison data).
     """
     threshold = Config.MATCH_THRESHOLD if threshold is None else threshold
     margin = Config.MATCH_MARGIN if margin is None else margin
     snapshot = get_snapshot()
     if not snapshot.faces or snapshot.matrix is None or len(snapshot.matrix) == 0:
-        return None, -1.0, -1.0
+        return None, -1.0, -1.0, []
 
     vec = np.asarray(input_embedding, dtype=np.float32)
     if snapshot.matrix.shape[1] != vec.shape[0]:
@@ -75,11 +77,11 @@ def match(input_embedding, threshold=None, margin=None):
             "Embedding dimension mismatch (cache=%d, input=%d).",
             snapshot.matrix.shape[1], vec.shape[0],
         )
-        return None, -1.0, -1.0
+        return None, -1.0, -1.0, []
 
     norm = float(np.linalg.norm(vec))
     if norm == 0:
-        return None, -1.0, -1.0
+        return None, -1.0, -1.0, []
     vec = vec / norm
 
     sims = np.dot(snapshot.matrix, vec)
@@ -92,6 +94,18 @@ def match(input_embedding, threshold=None, margin=None):
         best_score = float(sims[best_idx])
         runner_up = float(sims[int(top2[1])])
 
+    n = min(top_n, len(sims))
+    top_idx = np.argpartition(sims, -n)[-n:] if n > 1 else np.array([best_idx])
+    top_idx = top_idx[np.argsort(-sims[top_idx])]
+    top_candidates = [
+        {
+            "name": snapshot.faces[int(i)]["name"],
+            "score": round(float(sims[int(i)]), 4),
+            "photo_url": snapshot.faces[int(i)].get("photo_url"),
+        }
+        for i in top_idx
+    ]
+
     if best_score >= threshold and (best_score - runner_up) >= margin:
-        return snapshot.faces[best_idx], best_score, runner_up
-    return None, best_score, runner_up
+        return snapshot.faces[best_idx], best_score, runner_up, top_candidates
+    return None, best_score, runner_up, top_candidates

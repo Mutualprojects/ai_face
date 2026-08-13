@@ -51,25 +51,32 @@ class Config:
     SUPABASE_URL = os.getenv("SUPABASE_URL", "http://localhost:8005")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-    # Single source of truth for the match threshold (previously:
-    # MATCH_THRESHOLD=0.35 global, a hardcoded 0.38 in /api/match, and a
-    # stale docstring claiming 0.42 that was never set — three different
-    # answers to "did this face match" depending on which code path ran).
+    # Best-of-best matching: the worker keeps the HIGHEST score seen for a
+    # person across the whole walk (see presence_update) instead of
+    # averaging noisy frames, so the clearest frame of the walk decides the
+    # identity. Threshold kept lenient so walking/partial faces still match.
     MATCH_THRESHOLD = float(os.getenv("MATCH_THRESHOLD", "0.35"))
 
-    # NEW: margin-based rejection. A cosine score can clear the threshold
-    # and STILL be a bad match if a second identity scores almost as high
-    # (common with siblings, similar lighting, low-quality crops). We now
-    # require the winner to beat the runner-up by this margin, not just
-    # beat the threshold. Set to 0 to disable and fall back to pure
-    # threshold behaviour.
+    # Margin-based rejection. A cosine score can clear the threshold and
+    # STILL be a bad match if a second identity scores almost as high
+    # (common with siblings, similar lighting, low-quality crops). The
+    # winner must beat the runner-up by this margin. Set to 0 to disable
+    # and fall back to pure threshold behaviour.
     MATCH_MARGIN = float(os.getenv("MATCH_MARGIN", "0.02"))
 
-    # Detection confidence gates — previously 0.35 in one code path and
-    # 0.25 in another for the identical purpose. Unified to one value.
+    # Detection confidence gate — blurry/unclear detections are skipped
+    # BEFORE matching so their noisy embeddings can never produce a match.
     DET_SCORE_MIN = float(os.getenv("DET_SCORE_MIN", "0.25"))
     REGISTER_DET_SCORE_MIN = float(os.getenv("REGISTER_DET_SCORE_MIN", "0.70"))
 
+    # Faces smaller than this many px are too low-resolution to embed
+    # reliably — tiny crops are a classic false-positive source.
+    MIN_FACE_PX = int(os.getenv("MIN_FACE_PX", "15"))
+
+    # Temporal confirmation: log on the first matched frame. The
+    # best-of-best tracker in presence_update keeps upgrading the recorded
+    # score/crop as the walk produces clearer frames, so a single blurry
+    # first frame never caps the final match.
     PRESENCE_CONFIRM_FRAMES = int(os.getenv("PRESENCE_CONFIRM_FRAMES", "1"))
     PRESENCE_TIMEOUT_SEC = float(os.getenv("PRESENCE_TIMEOUT_SEC", "8.0"))
     FRAME_INTERVAL = float(os.getenv("FRAME_INTERVAL", "0.10"))
@@ -714,7 +721,7 @@ def get_cache_snapshot() -> _CacheSnapshot:
         return _CACHE_SNAPSHOT
 
 
-def match_embedding(input_emb, snapshot: _CacheSnapshot = None, threshold=None, margin=None):
+def match_embedding(input_emb, snapshot: _CacheSnapshot = None, threshold=None, margin=None, top_n: int = 3):
     """
     Vectorized cosine similarity match against the atomic cache snapshot,
     with margin-based rejection.
@@ -727,7 +734,10 @@ def match_embedding(input_emb, snapshot: _CacheSnapshot = None, threshold=None, 
     low-confidence guess. Set margin=0 to fall back to pure
     threshold-only behaviour.
 
-    Returns (best_face_or_None, best_score, runner_up_score).
+    Returns (best_face_or_None, best_score, runner_up_score, top_candidates)
+    where top_candidates is a list of up to `top_n` dicts
+    {name, score, photo_url} ranked by similarity — the "who is this
+    closest to" comparison data shown in the UI.
     """
     if threshold is None:
         threshold = Config.MATCH_THRESHOLD
@@ -737,7 +747,7 @@ def match_embedding(input_emb, snapshot: _CacheSnapshot = None, threshold=None, 
         snapshot = get_cache_snapshot()
 
     if not snapshot.faces or snapshot.matrix is None or len(snapshot.matrix) == 0:
-        return None, -1.0, -1.0
+        return None, -1.0, -1.0, []
 
     input_vec = np.asarray(input_emb, dtype=np.float32)
     if snapshot.matrix.shape[1] != input_vec.shape[0]:
@@ -747,11 +757,11 @@ def match_embedding(input_emb, snapshot: _CacheSnapshot = None, threshold=None, 
             "after confirming embeddings are regenerated.",
             snapshot.matrix.shape[1], input_vec.shape[0],
         )
-        return None, -1.0, -1.0
+        return None, -1.0, -1.0, []
 
     norm_in = np.linalg.norm(input_vec)
     if norm_in == 0:
-        return None, -1.0, -1.0
+        return None, -1.0, -1.0, []
     vec = input_vec / norm_in
 
     sims = np.dot(snapshot.matrix, vec)
@@ -766,9 +776,23 @@ def match_embedding(input_emb, snapshot: _CacheSnapshot = None, threshold=None, 
         best_score = float(sims[best_idx])
         runner_up = float(sims[int(top2_idx[1])])
 
+    # Top-N candidates for the comparison view (always computed so the UI
+    # can show exactly which enrolled identities a face is closest to).
+    n = min(top_n, len(sims))
+    top_idx = np.argpartition(sims, -n)[-n:] if n > 1 else np.array([best_idx])
+    top_idx = top_idx[np.argsort(-sims[top_idx])]
+    top_candidates = [
+        {
+            "name": snapshot.faces[int(i)]["name"],
+            "score": round(float(sims[int(i)]), 4),
+            "photo_url": snapshot.faces[int(i)].get("photo_url"),
+        }
+        for i in top_idx
+    ]
+
     if best_score >= threshold and (best_score - runner_up) >= margin:
-        return snapshot.faces[best_idx], best_score, runner_up
-    return None, best_score, runner_up
+        return snapshot.faces[best_idx], best_score, runner_up, top_candidates
+    return None, best_score, runner_up, top_candidates
 
 
 def refresh_cache():
@@ -933,7 +957,7 @@ if supabase is not None:
 # ──────────────────────────────────────────────────────────
 
 def analyze_frame(img, snapshot: _CacheSnapshot = None, run_yolo: bool = False,
-                   yolo_imgsz: int = None, min_face_px: int = 15,
+                   yolo_imgsz: int = None, min_face_px: int = None,
                    exclusion_zones: list = None):
     """
     Runs face detection + matching (and optionally YOLO person-body
@@ -978,6 +1002,9 @@ def analyze_frame(img, snapshot: _CacheSnapshot = None, run_yolo: bool = False,
     if not faces:
         return detections, bodies
 
+    if min_face_px is None:
+        min_face_px = Config.MIN_FACE_PX
+
     for face in faces:
         det_score = float(getattr(face, "det_score", 1.0))
         if det_score < Config.DET_SCORE_MIN:
@@ -1008,19 +1035,23 @@ def analyze_frame(img, snapshot: _CacheSnapshot = None, run_yolo: bool = False,
 
         embedding = face.embedding
         lm = getattr(face, "landmark_2d_106", None)
-        best_known, best_score, runner_up = match_embedding(embedding, snapshot)
+        best_known, best_score, runner_up, top_candidates = match_embedding(embedding, snapshot)
 
         # Retry pass on the enhanced, padded crop if no match was found —
-        # identical padding/retry behaviour on every call site now.
-        if not best_known and enhanced_crop is not None and enhanced_crop.size > 0:
+        # identical padding/retry behaviour on every call site now. When the
+        # enhanced-crop embedding produces a HIGHER score than the raw
+        # full-frame embedding, the enhanced result wins: it is the strongest
+        # signal for small/blurry/low-contrast live crops, which is exactly
+        # when the raw embedding under-scores a genuine match.
+        if (not best_known or best_score < 0.90) and enhanced_crop is not None and enhanced_crop.size > 0:
             try:
                 padded_crop = pad_image(enhanced_crop, 50)
                 enh_faces = face_app.get(padded_crop)
                 if enh_faces:
                     best_enh = max(enh_faces, key=lambda f: float(getattr(f, 'det_score', 0)))
-                    enh_known, enh_score, enh_runner_up = match_embedding(best_enh.embedding, snapshot)
-                    if enh_known:
-                        best_known, best_score, runner_up = enh_known, enh_score, enh_runner_up
+                    enh_known, enh_score, enh_runner_up, enh_top = match_embedding(best_enh.embedding, snapshot)
+                    if enh_score > best_score:
+                        best_known, best_score, runner_up, top_candidates = enh_known, enh_score, enh_runner_up, enh_top
                         lm = getattr(best_enh, "landmark_2d_106", None)
             except Exception:
                 pass
@@ -1037,6 +1068,7 @@ def analyze_frame(img, snapshot: _CacheSnapshot = None, run_yolo: bool = False,
             "photo_url": best_known.get("photo_url") if best_known else None,
             "confidence": round(max(best_score, 0.0), 4),
             "runner_up_score": round(max(runner_up, 0.0), 4),
+            "top3": top_candidates,
             "bbox": bbox,
             "crop_b64": crop_b64,
             "det_score": round(det_score, 3),
@@ -1239,35 +1271,69 @@ WS_BUSY: dict = {}
 WS_BUSY_LOCK = threading.Lock()
 
 
-def presence_update(camera_id: str, name: str, score: float, photo_url, crop_b64):
+def presence_update(camera_id: str, name: str, score: float, photo_url, crop_b64, top_matches: list = None, person_id=None, is_visitor=False):
+    """Track a matched face across frames. Returns (is_confirmed, best_score).
+
+    Best-of-best semantics: instead of averaging the noisy per-frame
+    scores (which lets a single blurry frame drag a confident match down
+    below threshold), we keep the HIGHEST score seen during the walk and
+    keep upgrading the stored crop/photo/top-matches with it. The clearest
+    frame of the walk therefore decides the final match, which is what
+    "best of best" means here."""
     now = time.time()
     with PRESENCE_LOCK:
         if camera_id not in PRESENCE_TRACKER:
             PRESENCE_TRACKER[camera_id] = {}
         tracker = PRESENCE_TRACKER[camera_id]
         if name not in tracker:
-            tracker[name] = {"frames": 0, "scores": [], "last_seen": 0,
-                             "photo_url": photo_url, "crop": crop_b64, "confirmed": False}
+            tracker[name] = {"frames": 0, "scores": [], "best_score": -1.0,
+                             "last_seen": 0, "photo_url": photo_url,
+                             "crop": crop_b64, "best_top": top_matches,
+                             "person_id": person_id, "is_visitor": is_visitor,
+                             "confirmed": False}
         entry = tracker[name]
         entry["frames"] += 1
         entry["scores"] = (entry["scores"] + [score])[-10:]
+        if score > entry.get("best_score", -1.0):
+            entry["best_score"] = score
+            entry["photo_url"] = photo_url
+            entry["crop"] = crop_b64
+            entry["best_top"] = top_matches
+            if person_id is not None:
+                entry["person_id"] = person_id
+            entry["is_visitor"] = is_visitor
         entry["last_seen"] = now
-        entry["photo_url"] = photo_url
-        entry["crop"] = crop_b64
         if entry["frames"] >= Config.PRESENCE_CONFIRM_FRAMES:
             entry["confirmed"] = True
-        avg = sum(entry["scores"]) / len(entry["scores"])
-    return entry["confirmed"], avg
+        best = entry["best_score"]
+    return entry["confirmed"], best
+
 
 def presence_cleanup(camera_id: str):
+    """Remove stale entries from the presence tracker.
+
+    A matched face is only logged to the database when it LEAVES the
+    presence window — by then presence_update has accumulated the best-of-
+    best score/crop of the whole walk, so the row stores the clearest frame
+    rather than the first (possibly blurry) one."""
     now = time.time()
+    to_flush = []
     with PRESENCE_LOCK:
         if camera_id not in PRESENCE_TRACKER:
             return
         stale = [n for n, d in PRESENCE_TRACKER[camera_id].items()
                  if now - d["last_seen"] > Config.PRESENCE_TIMEOUT_SEC]
         for n in stale:
-            del PRESENCE_TRACKER[camera_id][n]
+            entry = PRESENCE_TRACKER[camera_id].pop(n)
+            if entry.get("confirmed") and n != "Unknown":
+                to_flush.append((n, entry))
+
+    for name, entry in to_flush:
+        worker_log_match(
+            camera_id, name, entry["best_score"], entry.get("crop"),
+            person_id=None if entry.get("is_visitor") else entry.get("person_id"),
+            top_matches=entry.get("best_top"),
+        )
 
 
 def send_realtime_recognition_email(person_id: str, name: str, camera_id: str, confidence: float, email_addr: str):
@@ -1381,7 +1447,41 @@ def _safe_person_id(person_id, name=None):
     return person_id
 
 
-def log_match(camera_id: str, name: str, confidence: float, crop_b64: str, person_id: str = None):
+def _execute_safe_insert(payload: dict, camera_id: str = ""):
+    """Inserts payload into Supabase face_logs with multi-stage fallback (schema alignment + FK safety)."""
+    if supabase is None:
+        return
+
+    if payload.get("person_id"):
+        payload["person_id"] = _safe_person_id(payload["person_id"], payload.get("person_name"))
+
+    try:
+        supabase.table("face_logs").insert(payload).execute()
+        log.info("[Logger %s] Logged face: %s (conf=%.2f)", camera_id, payload.get("person_name"), payload.get("confidence", 0))
+    except Exception as e:
+        # Fallback Level 1: Strip columns not present in standard face_logs schema
+        allowed_keys = {"id", "person_name", "confidence", "snapshot_url", "timestamp", "camera_id", "person_id", "org_id"}
+        clean_payload = {k: v for k, v in payload.items() if k in allowed_keys}
+
+        try:
+            supabase.table("face_logs").insert(clean_payload).execute()
+            log.info("[Logger %s] Clean schema fallback insert succeeded for %s", camera_id, payload.get("person_name"))
+        except Exception as e_clean:
+            # Fallback Level 2: Handle Foreign Key violations (23503 on camera_id or person_id)
+            err_fk = str(e_clean)
+            if "camera_id" in err_fk or "23503" in err_fk or "fkey" in err_fk:
+                clean_payload["camera_id"] = None
+            if "person_id" in err_fk or "23503" in err_fk or "fkey" in err_fk:
+                clean_payload["person_id"] = None
+
+            try:
+                supabase.table("face_logs").insert(clean_payload).execute()
+                log.info("[Logger %s] FK-safe fallback insert succeeded for %s", camera_id, payload.get("person_name"))
+            except Exception as e_final:
+                log.error("[Logger %s] Log insert failed after all fallbacks: %s", camera_id, e_final)
+
+
+def log_match(camera_id: str, name: str, confidence: float, crop_b64: str, person_id: str = None, top_matches: list = None):
     if supabase is None:
         return
     person_id = _safe_person_id(person_id, name)
@@ -1399,14 +1499,19 @@ def log_match(camera_id: str, name: str, confidence: float, crop_b64: str, perso
         created_at = datetime.now(timezone.utc).isoformat()
         payload = {
             "id": row_id,
+            "person_id": person_id,
             "person_name": name,
             "confidence": round(confidence, 4),
             "snapshot_url": crop_b64,
             "timestamp": created_at,
             "camera_id": camera_id
         }
-        supabase.table("face_logs").insert(payload).execute()
-        log.info("[Logger %s] Logged event: %s (person_id=%s, conf=%.2f)", camera_id, name, person_id, confidence)
+        if top_matches:
+            payload["top_matches"] = [
+                {"name": m.get("name"), "score": m.get("score"), "photo_url": m.get("photo_url")}
+                for m in top_matches
+            ]
+        _execute_safe_insert(payload, camera_id)
 
         try:
             publish_event(get_camera_org(camera_id),
@@ -1433,6 +1538,7 @@ def log_match(camera_id: str, name: str, confidence: float, crop_b64: str, perso
             LOG_SSE_QUEUE.put_nowait({
                 "id": row_id, "person_id": person_id, "person_name": name, "confidence": round(confidence, 4),
                 "snapshot_url": crop_b64, "created_at": created_at, "camera_id": camera_id,
+                "top_matches": [m for m in (top_matches or [])],
             })
         except queue.Full:
             pass
@@ -1440,7 +1546,7 @@ def log_match(camera_id: str, name: str, confidence: float, crop_b64: str, perso
         log.error("[Logger %s] Log error: %s", camera_id, e)
 
 
-def worker_log_match(camera_id: str, name: str, confidence: float, crop_b64: str, person_id: str = None):
+def worker_log_match(camera_id: str, name: str, confidence: float, crop_b64: str, person_id: str = None, top_matches: list = None):
     """Same cooldown-guarded insert used by CameraWorker (longer cooldown,
     fire-and-forget async insert instead of feeding the SSE queue)."""
     if supabase is None:
@@ -1457,16 +1563,22 @@ def worker_log_match(camera_id: str, name: str, confidence: float, crop_b64: str
 
     def run_db_insert():
         try:
+            from datetime import datetime, timezone
             payload = {
                 "id": str(uuid.uuid4()),
                 "person_id": person_id,
                 "person_name": name,
                 "confidence": round(confidence, 4),
                 "snapshot_url": crop_b64,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "camera_id": camera_id
             }
-            supabase.table("face_logs").insert(payload).execute()
-            log.info("[Async Logger %s] Logged face: %s (person_id=%s, conf=%.2f)", camera_id, name, person_id, confidence)
+            if top_matches:
+                payload["top_matches"] = [
+                    {"name": m.get("name"), "score": m.get("score"), "photo_url": m.get("photo_url")}
+                    for m in top_matches
+                ]
+            _execute_safe_insert(payload, camera_id)
             try:
                 publish_event(get_camera_org(camera_id),
                               "unknown_person" if (not person_id or name.lower() == "unknown") else "face_detected",
@@ -1613,7 +1725,7 @@ class CameraWorker:
 
             snapshot = get_cache_snapshot()
             detections, bodies = analyze_frame(
-                proc_frame, snapshot, run_yolo=True, min_face_px=15,
+                proc_frame, snapshot, run_yolo=True,
                 exclusion_zones=zones
             )
 
@@ -1622,19 +1734,15 @@ class CameraWorker:
             for d in detections:
                 d["camera_id"] = self.camera_id
                 if d["matched"]:
-                    confirmed, avg_score = presence_update(
-                        self.camera_id, d["name"], d["confidence"], d.get("photo_url"), d["crop_b64"]
+                    confirmed, best_score = presence_update(
+                        self.camera_id, d["name"], d["confidence"], d.get("photo_url"), d["crop_b64"],
+                        top_matches=d.get("top3"), person_id=d.get("id"), is_visitor=d.get("is_visitor"),
                     )
                     d["confirmed"] = confirmed
-                    d["confidence"] = round(avg_score, 4)
-                    if confirmed:
-                        worker_log_match(
-                            self.camera_id, d["name"], avg_score, d["crop_b64"],
-                            person_id=None if d.get("is_visitor") else d.get("id"),
-                        )
+                    d["confidence"] = round(best_score, 4)
                 else:
                     d["confirmed"] = False
-                    worker_log_match(self.camera_id, "Unknown", d["confidence"], d["crop_b64"], person_id=None)
+                    worker_log_match(self.camera_id, "Unknown", d["confidence"], d["crop_b64"], person_id=None, top_matches=d.get("top3"))
 
             with LATEST_DETECTIONS_LOCK:
                 LATEST_DETECTIONS[self.camera_id] = {
@@ -1669,6 +1777,13 @@ def start_all_workers():
         log.warning("[Workers] Skipping — Supabase or InsightFace not ready.")
         return
     try:
+        # Warm the matching cache before workers start so known faces are
+        # recognized from the very first frame (not just after a manual
+        # /api/refresh_cache call).
+        try:
+            refresh_cache()
+        except Exception as _r:
+            log.warning("[Workers] Initial cache refresh failed: %s", _r)
         res = supabase.table("cameras").select("*").execute()
         cameras = res.data or []
         with WORKERS_LOCK:
@@ -1730,6 +1845,28 @@ def stop_all_workers():
     log.info("[Workers] Stopped all %d camera worker(s).", len(ids))
 
 
+def cache_refresh_worker():
+    """Background worker that periodically reloads the known-face embedding
+    cache.
+
+    The cache is ONLY refreshed at process startup today, which means a
+    transient DB hiccup at boot (or a registration made while the backend is
+    already running) leaves the cache empty/stale forever — every face then
+    gets logged as 'Unknown' because there are no embeddings to match
+    against. Running a refresh loop here guarantees the live camera workers
+    always have the freshest enrollment data within CACHE_REFRESH_SEC."""
+    interval = float(os.getenv("CACHE_REFRESH_SEC", "60"))
+    log.info("[Cache] Cache refresh worker started (every %.0fs).", interval)
+    while True:
+        try:
+            time.sleep(interval)
+            if supabase is not None:
+                refresh_cache()
+        except Exception as e:
+            log.error("[Cache] Background refresh error: %s", e)
+            time.sleep(interval)
+
+
 def auto_cleanup_unknown_logs_worker():
     """Background worker running every 60s to purge Unknown face logs older
     than 50 minutes, keeping ALL Known person face logs PERMANENTLY."""
@@ -1765,7 +1902,11 @@ def auto_cleanup_unknown_logs_worker():
 
 if supabase is not None:
     try:
+        # Ensure the matching cache is warm BEFORE camera workers go live —
+        # otherwise the first minutes log every face as "Unknown".
+        refresh_cache()
         start_all_workers()
+        threading.Thread(target=cache_refresh_worker, daemon=True, name="cache-refresh").start()
         threading.Thread(target=auto_cleanup_unknown_logs_worker, daemon=True, name="unknown-logs-cleaner").start()
     except Exception as _w_err:
         log.error("[Workers] Could not start workers on boot: %s", _w_err)
@@ -1815,8 +1956,10 @@ def get_presence_all():
             for name, data in PRESENCE_TRACKER[cam_id].items():
                 if not data.get("confirmed") or name == "Unknown":
                     continue
-                scores = data.get("scores", [1.0])
-                conf = sum(scores) / len(scores)
+                conf = data.get("best_score", -1.0)
+                if conf < 0:
+                    scores = data.get("scores", [1.0])
+                    conf = sum(scores) / len(scores)
                 if name not in merged or conf > merged[name]["confidence"]:
                     meta = cache_map.get(name, {})
                     merged[name] = {
@@ -1837,7 +1980,7 @@ def home():
     return jsonify({
         "status": "online",
         "service": "Facial Recognition Backend with InsightFace",
-        "database": {"status": db_connection_status, "url": Config.SUPABASE_URL, "error": db_connection_error},
+        "database": {"status": ("Connected" if _live_db_connected() else "Failed"), "url": Config.SUPABASE_URL, "error": db_connection_error},
         "model_loaded": face_app is not None,
         "active_model": ACTIVE_MODEL_NAME,
         "match_threshold": Config.MATCH_THRESHOLD,
@@ -1847,6 +1990,32 @@ def home():
         "auth": {"api_keys_table_ready": api_keys_table_ready()},
     })
 
+_DB_STATUS_TTL = 15.0
+_db_status_cache = {"ts": 0.0, "ok": False}
+
+def _live_db_connected() -> bool:
+    """Re-test the Supabase connection instead of trusting the startup flag.
+    The startup probe can fail if the DB was briefly unreachable while the
+    backend booted, leaving db_connection_status='Failed' forever even though
+    the DB is fine a minute later."""
+    global db_connection_status
+    global _db_status_cache
+    now = time.time()
+    if now - _db_status_cache["ts"] < _DB_STATUS_TTL:
+        return _db_status_cache["ok"]
+    ok = False
+    try:
+        if supabase is not None:
+            supabase.table("known_faces").select("id").limit(1).execute()
+            ok = True
+    except Exception as e:
+        log.debug("Live DB health probe failed: %s", e)
+    _db_status_cache = {"ts": now, "ok": ok}
+    if ok and db_connection_status != "Connected":
+        db_connection_status = "Connected"
+    return ok
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     snapshot = get_cache_snapshot()
@@ -1854,7 +2023,7 @@ def health():
         workers = list(CAMERA_WORKERS.keys())
     return jsonify({
         "status": "healthy",
-        "database_connected": db_connection_status == "Connected",
+        "database_connected": _live_db_connected(),
         "model_loaded": face_app is not None,
         "active_model": ACTIVE_MODEL_NAME,
         "match_threshold": Config.MATCH_THRESHOLD,
@@ -2691,8 +2860,64 @@ def delete_camera(camera_id):
     stop_camera_worker(camera_id)
     with LATEST_DETECTIONS_LOCK:
         LATEST_DETECTIONS.pop(camera_id, None)
+    with PRESENCE_LOCK:
+        PRESENCE_TRACKER.pop(camera_id, None)
+    with LOG_LOCK:
+        for key in [k for k in LAST_LOGGED_TIME if k[0] == camera_id]:
+            del LAST_LOGGED_TIME[key]
+    log.info("[Camera] Deleted camera '%s' (DB + mediamtx + worker cleaned up).", camera_id)
 
     return jsonify({"success": True})
+
+
+@app.route("/api/cameras/activate", methods=["POST"])
+@require_api_key
+def activate_camera():
+    """Wire up a camera that was already inserted into Supabase by the web
+    UI (the frontend talks to Supabase directly, not to Flask). This endpoint
+    builds the mediamtx entry, restarts the relay, and (re)starts the
+    recognition worker so the camera actually streams and produces
+    detections. Idempotent — safe to call on create AND edit."""
+    data = request.json or {}
+    camera_id = data.get("id")
+    rtsp_url = data.get("rtsp_url")
+    if not camera_id:
+        return jsonify({"error": "Missing camera id"}), 400
+    if not rtsp_url or str(rtsp_url).lower() in ("null", "none", ""):
+        return jsonify({"error": "Missing rtsp_url"}), 400
+
+    # Make sure a DB row exists for this camera (created via the UI).
+    try:
+        res = supabase.table("cameras").select("id").eq("id", camera_id).execute()
+        if not res.data:
+            supabase.table("cameras").insert({
+                "id": camera_id,
+                "name": data.get("name") or camera_id,
+                "place": data.get("place") or data.get("location"),
+                "rtsp_url": rtsp_url,
+            }).execute()
+    except Exception as e:
+        log.error("[Camera activate] DB ensure failed for '%s': %s", camera_id, e)
+
+    src = build_mediamtx_src(rtsp_url)
+    write_mediamtx_yaml_entry(camera_id, src)
+    restart_mediamtx()
+
+    with WORKERS_LOCK:
+        worker = CAMERA_WORKERS.get(camera_id)
+    if worker:
+        worker.stop()
+        with WORKERS_LOCK:
+            CAMERA_WORKERS.pop(camera_id, None)
+
+    with WORKERS_LOCK:
+        if camera_id not in CAMERA_WORKERS:
+            w = CameraWorker(camera_id, source_type="rtsp")
+            CAMERA_WORKERS[camera_id] = w
+            w.start()
+
+    log.info("[Camera] Activated camera '%s' (mediamtx + worker up).", camera_id)
+    return jsonify({"success": True, "camera_id": camera_id})
 
 
 @app.route("/api/cameras/<camera_id>/screen_zones", methods=["GET"])
@@ -3138,7 +3363,7 @@ def delete_employee_by_code(employee_code):
 def get_face_logs():
     log_type = request.args.get("type", "all")
     try:
-        q = supabase.table("face_logs").select("*").order("created_at", desc=True).limit(100)
+        q = supabase.table("face_logs").select("*").order("timestamp", desc=True).limit(100)
         if log_type == "known":
             q = q.neq("person_name", "Unknown")
         elif log_type == "unknown":
@@ -3147,7 +3372,7 @@ def get_face_logs():
         logs = res.data or []
     except Exception:
         try:
-            q = supabase.table("face_logs").select("*").order("timestamp", desc=True).limit(100)
+            q = supabase.table("face_logs").select("*").order("created_at", desc=True).limit(100)
             if log_type == "known":
                 q = q.neq("person_name", "Unknown")
             elif log_type == "unknown":
@@ -3314,9 +3539,12 @@ def get_presence(camera_id):
     present = []
     for name, data in tracker.items():
         if data.get("confirmed") and name != "Unknown":
-            scores = data.get("scores", [1.0])
+            conf = data.get("best_score", -1.0)
+            if conf < 0:
+                scores = data.get("scores", [1.0])
+                conf = sum(scores) / len(scores)
             present.append({
-                "name": name, "confidence": round(sum(scores) / len(scores), 4),
+                "name": name, "confidence": round(conf, 4),
                 "seen_frames": data["frames"], "last_seen": data["last_seen"],
                 "seconds_ago": round(now - data["last_seen"], 1),
                 "photo_url": data.get("photo_url"), "crop": data.get("crop"),
@@ -3339,21 +3567,21 @@ def process_ws_frame(camera_id, image_b64):
 
     h, w = img.shape[:2]
     snapshot = get_cache_snapshot()
-    detections, bodies = analyze_frame(img, snapshot, run_yolo=True, yolo_imgsz=320, min_face_px=8)
+    detections, bodies = analyze_frame(img, snapshot, run_yolo=True, yolo_imgsz=320)
 
     presence_cleanup(camera_id)
     for d in detections:
         d["camera_id"] = camera_id
         if d["matched"]:
-            presence_update(camera_id, d["name"], d["confidence"], d.get("photo_url"), d["crop_b64"])
-            d["confirmed"] = True
-            log_match(
-                camera_id, d["name"], d["confidence"], d["crop_b64"],
-                person_id=None if d.get("is_visitor") else d.get("id"),
+            confirmed, best_score = presence_update(
+                camera_id, d["name"], d["confidence"], d.get("photo_url"), d["crop_b64"],
+                top_matches=d.get("top3"), person_id=d.get("id"), is_visitor=d.get("is_visitor"),
             )
+            d["confirmed"] = confirmed
+            d["confidence"] = round(best_score, 4)
         else:
             d["confirmed"] = False
-            log_match(camera_id, "Unknown", d["confidence"], d["crop_b64"])
+            worker_log_match(camera_id, "Unknown", d["confidence"], d["crop_b64"], top_matches=d.get("top3"))
 
     return {
         "camera_id": camera_id, "detections": detections, "bodies": bodies,

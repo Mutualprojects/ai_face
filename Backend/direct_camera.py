@@ -67,11 +67,11 @@ class Config:
     MAX_WIDTH = int(os.getenv("DIRECT_MAX_WIDTH", "1280"))
     MIN_FACE_PX = int(os.getenv("MIN_FACE_PX", "15"))
 
-    PRESENCE_CONFIRM_FRAMES = int(os.getenv("PRESENCE_CONFIRM_FRAMES", "2"))
+    PRESENCE_CONFIRM_FRAMES = int(os.getenv("PRESENCE_CONFIRM_FRAMES", "1"))
     PRESENCE_TIMEOUT_SEC = float(os.getenv("PRESENCE_TIMEOUT_SEC", "8.0"))
 
     LOG_COOLDOWN_KNOWN_SEC = float(os.getenv("LOG_COOLDOWN_KNOWN_SEC", "10.0"))
-    LOG_COOLDOWN_UNKNOWN_SEC = float(os.getenv("LOG_COOLDOWN_UNKNOWN_SEC", "30.0"))
+    LOG_COOLDOWN_UNKNOWN_SEC = float(os.getenv("LOG_COOLDOWN_UNKNOWN_SEC", "10.0"))
 
     CACHE_REFRESH_SEC = int(os.getenv("CACHE_REFRESH_SEC", "60"))
     LOG_UNKNOWN = os.getenv("LOG_UNKNOWN", "true").lower() == "true"
@@ -562,10 +562,8 @@ class DirectCameraWorker:
         now = time.time()
         for d in detections:
             if d["matched"]:
-                confirmed = self._presence_update(d["name"], d["confidence"], d.get("photo_url"), d.get("crop_b64"))
+                confirmed = self._presence_update(d["name"], d["confidence"], d.get("photo_url"), d.get("crop_b64"), person_id=d.get("id"), is_visitor=d.get("is_visitor"))
                 d["confirmed"] = confirmed
-                if confirmed:
-                    self._log_match(d["name"], d["confidence"], d["crop_b64"], person_id=d.get("id"))
             else:
                 d["confirmed"] = False
                 if Config.LOG_UNKNOWN:
@@ -579,30 +577,47 @@ class DirectCameraWorker:
     # ── presence ───────────────────────────────────────────
 
     def _presence_cleanup(self):
+        """Flush stale presence entries. A matched face is logged to the DB
+        when it LEAVES the presence window using its best-of-best score/crop
+        (the clearest frame of the walk), not the first blurry one."""
         now = time.time()
+        to_flush = []
         with self.presence_lock:
             stale = [
                 name for name, data in self.presence.items()
                 if now - data["last_seen"] > Config.PRESENCE_TIMEOUT_SEC
             ]
             for name in stale:
-                del self.presence[name]
+                to_flush.append((name, self.presence.pop(name)))
 
-    def _presence_update(self, name, score, photo_url, crop):
+        for name, entry in to_flush:
+            if entry.get("confirmed") and name != "Unknown":
+                self._log_match(name, entry["best_score"], entry.get("crop"),
+                                person_id=None if entry.get("is_visitor") else entry.get("person_id"))
+
+    def _presence_update(self, name, score, photo_url, crop, person_id=None, is_visitor=False):
         now = time.time()
         with self.presence_lock:
             if name not in self.presence:
-                self.presence[name] = {"frames": 0, "scores": [], "last_seen": 0, "confirmed": False}
+                self.presence[name] = {"frames": 0, "scores": [], "best_score": -1.0,
+                                       "last_seen": 0, "confirmed": False,
+                                       "photo_url": photo_url, "crop": crop,
+                                       "person_id": person_id, "is_visitor": is_visitor}
             entry = self.presence[name]
             entry["frames"] += 1
             entry["scores"] = (entry["scores"] + [score])[-10:]
+            if score > entry.get("best_score", -1.0):
+                entry["best_score"] = score
+                entry["photo_url"] = photo_url
+                entry["crop"] = crop
+                if person_id is not None:
+                    entry["person_id"] = person_id
+                entry["is_visitor"] = is_visitor
             entry["last_seen"] = now
-            entry["photo_url"] = photo_url
-            entry["crop"] = crop
             if entry["frames"] >= Config.PRESENCE_CONFIRM_FRAMES:
                 entry["confirmed"] = True
-            avg = sum(entry["scores"]) / len(entry["scores"])
-        return entry["confirmed"] and avg
+            best = entry["best_score"]
+        return entry["confirmed"] and best
 
     # ── logging to Supabase ────────────────────────────────
 

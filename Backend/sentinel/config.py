@@ -24,6 +24,9 @@ class Config:
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
     # ── matching ─────────────────────────────────────────────
+    # Lenient best-of-best matching: workers keep the highest per-walk
+    # score (see presence_update) and the clearest frame of the walk decides
+    # the identity, so walking/partial faces still match reliably.
     MATCH_THRESHOLD = float(os.getenv("MATCH_THRESHOLD", "0.35"))
     MATCH_MARGIN = float(os.getenv("MATCH_MARGIN", "0.02"))
     DET_SCORE_MIN = float(os.getenv("DET_SCORE_MIN", "0.25"))
@@ -33,7 +36,7 @@ class Config:
     YOLO_MODEL_PATH = os.getenv(
         "YOLO_MODEL_PATH", str(BACKEND_DIR / "yolov8n.pt")
     )
-    YOLO_CONF = float(os.getenv("YOLO_CONF", "0.40"))
+    YOLO_CONF = float(os.getenv("YOLO_CONF", "0.35"))
     YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "640"))
     YOLO_ENABLED = os.getenv("YOLO_ENABLED", "true").lower() == "true"
 
@@ -44,12 +47,13 @@ class Config:
     CAMERA_HEIGHT = int(os.getenv("CAMERA_HEIGHT", "720"))
 
     # ── presence ─────────────────────────────────────────────
-    PRESENCE_CONFIRM_FRAMES = int(os.getenv("PRESENCE_CONFIRM_FRAMES", "2"))
+    # A match must persist across N consecutive inference frames (1 for instant logging)
+    PRESENCE_CONFIRM_FRAMES = int(os.getenv("PRESENCE_CONFIRM_FRAMES", "1"))
     PRESENCE_TIMEOUT_SEC = float(os.getenv("PRESENCE_TIMEOUT_SEC", "8.0"))
 
     # ── database logging cadence ─────────────────────────────
-    LOG_COOLDOWN_KNOWN_SEC = float(os.getenv("LOG_COOLDOWN_KNOWN_SEC", "10.0"))
-    LOG_COOLDOWN_UNKNOWN_SEC = float(os.getenv("LOG_COOLDOWN_UNKNOWN_SEC", "30.0"))
+    LOG_COOLDOWN_KNOWN_SEC = float(os.getenv("LOG_COOLDOWN_KNOWN_SEC", "5.0"))
+    LOG_COOLDOWN_UNKNOWN_SEC = float(os.getenv("LOG_COOLDOWN_UNKNOWN_SEC", "10.0"))
     LOG_UNKNOWN = os.getenv("LOG_UNKNOWN", "true").lower() == "true"
 
     # ── realtime / service ports ─────────────────────────────

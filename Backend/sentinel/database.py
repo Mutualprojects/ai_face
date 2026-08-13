@@ -23,6 +23,9 @@ log = get_logger("sentinel.db")
 _client = None
 _client_lock = threading.Lock()
 
+COOLDOWNS = {}
+COOLDOWNS_LOCK = threading.Lock()
+
 
 def get_client():
     global _client
@@ -92,8 +95,6 @@ def log_detection(camera_id, person_name, confidence, snapshot_url, person_id=No
         else Config.LOG_COOLDOWN_KNOWN_SEC
     )
 
-    from .worker import COOLDOWNS, COOLDOWNS_LOCK
-
     with COOLDOWNS_LOCK:
         last = COOLDOWNS.get(key, 0.0)
         now = time.time()
@@ -117,7 +118,28 @@ def log_detection(camera_id, person_name, confidence, snapshot_url, person_id=No
                 "model_name": model_name,
                 "process_ms": round(float(process_ms), 2) if process_ms is not None else None,
             }
-            db.table("face_logs").insert(payload).execute()
+            try:
+                db.table("face_logs").insert(payload).execute()
+            except Exception as e_ins:
+                # If Supabase lacks extended columns, fallback to core schema columns
+                core_payload = {
+                    "id": payload["id"],
+                    "person_id": person_id,
+                    "person_name": person_name,
+                    "confidence": payload["confidence"],
+                    "snapshot_url": snapshot_url,
+                    "camera_id": camera_id,
+                    "timestamp": payload["timestamp"]
+                }
+                try:
+                    db.table("face_logs").insert(core_payload).execute()
+                except Exception as e_fk:
+                    err_s = str(e_fk)
+                    if "camera_id" in err_s or "23503" in err_s or "fkey" in err_s:
+                        core_payload["camera_id"] = None
+                    if "person_id" in err_s or "23503" in err_s or "fkey" in err_s:
+                        core_payload["person_id"] = None
+                    db.table("face_logs").insert(core_payload).execute()
             log.info(
                 "[%s] LOG -> %s (conf=%.2f, matched=%s)",
                 camera_id, person_name, payload["confidence"], matched,
