@@ -74,16 +74,6 @@ const T = {
   textFaint: "#94A3B8",  // Tertiary text (Slate 400)
 } as const;
 
-/* Mock directory — replace with a fetch to your /api/registered_faces route */
-const MOCK_EMPLOYEES: Employee[] = [
-  { id: "e1", name: "Ananya Rao", department: "Engineering", photo: "https://i.pravatar.cc/150?img=47" },
-  { id: "e2", name: "Marcus Webb", department: "Sales", photo: "https://i.pravatar.cc/150?img=13" },
-  { id: "e3", name: "Priya Nair", department: "People Ops", photo: "https://i.pravatar.cc/150?img=32" },
-  { id: "e4", name: "Daniel Cho", department: "Finance", photo: "https://i.pravatar.cc/150?img=8" },
-  { id: "e5", name: "Sara Ilić", department: "Design", photo: "https://i.pravatar.cc/150?img=45" },
-  { id: "e6", name: "Rahul Mehta", department: "Engineering", photo: "https://i.pravatar.cc/150?img=51" },
-];
-
 const PURPOSES: Purpose[] = ["Meeting", "Interview", "Delivery", "Other"];
 
 const STEPS: { n: 1 | 2 | 3; label: string; icon: typeof User }[] = [
@@ -122,6 +112,32 @@ const CornerMarker = ({ position }: { position: "tl" | "tr" | "bl" | "br" }) => 
   if (position === "br") { style.bottom = 8; style.right = 8; style.borderBottomWidth = 2; style.borderRightWidth = 2; }
   return <div style={style} />;
 };
+
+const AVATAR_COLORS = ["#4F46E5", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"];
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function Avatar({ src, name, size, radius }: { src?: string | null; name: string; size: number; radius?: number }) {
+  if (src) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" style={{ width: size, height: size, borderRadius: radius ?? "50%", objectFit: "cover", flexShrink: 0 }} />;
+  }
+  const init = initialsOf(name) || "?";
+  const hash = Array.from(name).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const bg = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  return (
+    <div style={{ width: size, height: size, borderRadius: radius ?? "50%", background: bg, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: Math.max(10, size * 0.38), flexShrink: 0 }}>
+      {init}
+    </div>
+  );
+}
 
 export default function VisitorsPanel({ onSuccess, canCapture = false, captureFrame, pendingCrop = null }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -309,21 +325,18 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     async function loadFaces() {
       try {
         const res = await fetch("/api/registered_faces");
-        if (res.ok) {
-          const data = await res.json();
-          const mapped: Employee[] = data.map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            department: "Staff",
-            photo: item.photo_url || "https://i.pravatar.cc/150?img=47",
-          }));
-          setRegisteredEmployees(mapped);
-        } else {
-          setRegisteredEmployees(MOCK_EMPLOYEES);
-        }
+        if (!res.ok) throw new Error(`Failed to load employees (${res.status})`);
+        const data = await res.json();
+        const mapped: Employee[] = data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          department: item.department || "Staff",
+          photo: item.photo_url || "",
+        }));
+        setRegisteredEmployees(mapped);
       } catch (err) {
         console.error("Error loading registered faces:", err);
-        setRegisteredEmployees(MOCK_EMPLOYEES);
+        setRegisteredEmployees([]);
       }
     }
     loadFaces();
@@ -912,7 +925,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
   });
 
   const getHostName = (id: string) => registeredEmployees.find(e => e.id === id)?.name || "Unknown Host";
-  const getHostPhoto = (id: string) => registeredEmployees.find(e => e.id === id)?.photo || "https://i.pravatar.cc/150?img=0";
+  const getHost = (id: string) => registeredEmployees.find(e => e.id === id);
 
   /* ================================================================== */
   /*  Log View Renderers                                                */
@@ -1062,8 +1075,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
           {filteredVisitors.map((v) => (
             <tr key={v.visitor_id} style={{ borderBottom: `1px solid ${T.line}`, transition: "background 0.2s" }} className="hover-row">
               <td style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={v.photo_image || "https://i.pravatar.cc/150"} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
+                <Avatar src={v.photo_image} name={v.full_name} size={32} />
                 <div>
                   <div style={{ fontWeight: 600, color: T.text }}>{v.full_name}</div>
                   <div style={{ fontSize: 11, color: T.textMuted }}>{v.phone}</div>
@@ -1072,8 +1084,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
               <td style={{ padding: "12px 16px", color: T.textMuted }}>{v.company_name || "—"}</td>
               <td style={{ padding: "12px 16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getHostPhoto(v.meet_employee_id)} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover" }} />
+                  {(() => { const h = getHost(v.meet_employee_id); return <Avatar src={h?.photo} name={h?.name || "Unknown Host"} size={20} />; })()}
                   <span style={{ fontWeight: 500, color: T.text }}>{getHostName(v.meet_employee_id)}</span>
                 </div>
               </td>
@@ -1102,8 +1113,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     const KanbanCard = ({ v }: { v: VisitorRecord }) => (
       <div style={{ background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 12, padding: 10, marginBottom: 10, boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={v.photo_image || "https://i.pravatar.cc/150"} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover" }} />
+          <Avatar src={v.photo_image} name={v.full_name} size={44} radius={10} />
           <div>
             <h4 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600, color: T.text }}>{v.full_name}</h4>
             <p style={{ margin: 0, fontSize: 12, color: T.textMuted }}>{v.company_name || v.phone}</p>
@@ -1111,8 +1121,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px dashed ${T.line}`, paddingTop: 10, marginTop: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMuted }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={getHostPhoto(v.meet_employee_id)} alt="" style={{ width: 16, height: 16, borderRadius: "50%", objectFit: "cover" }} />
+            {(() => { const h = getHost(v.meet_employee_id); return <Avatar src={h?.photo} name={h?.name || "Unknown Host"} size={16} />; })()}
             {getHostName(v.meet_employee_id)}
           </div>
           <span style={{ fontSize: 11, background: T.bgField, padding: "2px 6px", borderRadius: 4, color: T.textMuted }}>
@@ -1154,8 +1163,9 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
       {filteredVisitors.map(v => (
         <div key={v.visitor_id} style={{ background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 6px rgba(0,0,0,0.02)", display: "flex", flexDirection: "column" }}>
           <div style={{ height: 160, background: T.bgField, position: "relative" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={v.photo_image || "https://i.pravatar.cc/150"} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <Avatar src={v.photo_image} name={v.full_name} size={160} radius={0} />
+            </div>
             <div style={{ position: "absolute", top: 10, right: 10 }}>{renderStatusBadge(v)}</div>
           </div>
           <div style={{ padding: 12, flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
@@ -1163,8 +1173,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
               <h4 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600, color: T.text }}>{v.full_name}</h4>
               <p style={{ margin: "0 0 10px", fontSize: 12, color: T.textMuted }}>{v.company_name || v.phone}</p>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: T.bgField, borderRadius: 8, marginBottom: 10 }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getHostPhoto(v.meet_employee_id)} alt="" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }} />
+                {(() => { const h = getHost(v.meet_employee_id); return <Avatar src={h?.photo} name={h?.name || "Unknown Host"} size={24} />; })()}
                 <div style={{ fontSize: 11 }}>
                   <span style={{ display: "block", color: T.textMuted, fontWeight: 500 }}>Host</span>
                   <span style={{ display: "block", color: T.text, fontWeight: 600 }}>{getHostName(v.meet_employee_id)}</span>
@@ -1188,8 +1197,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
       {filteredVisitors.map(v => (
         <div key={v.visitor_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: T.bgPanel, border: `1px solid ${T.line}`, borderRadius: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={v.photo_image || "https://i.pravatar.cc/150"} alt="" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }} />
+            <Avatar src={v.photo_image} name={v.full_name} size={40} />
             <div>
               <div style={{ fontWeight: 600, color: T.text, fontSize: 14 }}>{v.full_name}</div>
               <div style={{ fontSize: 12, color: T.textMuted }}>{v.company_name ? `${v.company_name} • ` : ""}{v.purpose_of_visit} • Meeting {getHostName(v.meet_employee_id)}</div>

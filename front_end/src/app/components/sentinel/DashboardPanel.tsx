@@ -114,31 +114,18 @@ export default function SentinelDashboard() {
       const resLogs = await fetch("/api/face_logs").catch(() => null);
 
       if (resFaces?.ok) setFaces(await resFaces.json());
-      else {
-        // Fallback Mock Data
-        setFaces([
-          { id: "1", name: "Sarah Connor", department: "Security", photo_url: "https://i.pravatar.cc/150?img=5", created_at: new Date().toISOString() },
-          { id: "2", name: "John Doe", department: "Engineering", photo_url: "https://i.pravatar.cc/150?img=11", created_at: new Date().toISOString() },
-        ]);
-      }
+      else setFaces([]);
 
       if (resVisitors?.ok) setVisitors(await resVisitors.json());
-      else {
-        setVisitors([
-          { visitor_id: "v1", full_name: "Alice Smith", phone: "555-0123", company_name: "TechCorp", id_proof_number: "ID-99", photo_image: "https://i.pravatar.cc/150?img=9", meet_employee_id: "1", purpose_of_visit: "Meeting", check_in_time: new Date(Date.now() - 3600000).toISOString(), check_out_time: null },
-          { visitor_id: "v2", full_name: "Bob Builder", phone: "555-0124", company_name: "Construct", id_proof_number: "ID-88", photo_image: "https://i.pravatar.cc/150?img=12", meet_employee_id: "2", purpose_of_visit: "Delivery", check_in_time: new Date(Date.now() - 7200000).toISOString(), check_out_time: new Date().toISOString() },
-        ]);
-      }
+      else setVisitors([]);
 
       if (resLogs?.ok) setLogs(await resLogs.json());
-      else {
-        setLogs([
-          { id: "l1", person_name: "Sarah Connor", confidence: 98.5, snapshot_url: "", timestamp: new Date().toISOString(), status: "Authorized" },
-          { id: "l2", person_name: "Unknown Subject", confidence: 45.2, snapshot_url: "", timestamp: new Date(Date.now() - 60000).toISOString(), status: "Unknown" },
-        ]);
-      }
+      else setLogs([]);
     } catch (err) {
       console.error("Dashboard data load error:", err);
+      setFaces([]);
+      setVisitors([]);
+      setLogs([]);
     } finally {
       setLoading(false);
     }

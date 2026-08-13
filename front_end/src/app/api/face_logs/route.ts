@@ -10,14 +10,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get("limit");
-    const limit = limitParam === "all" ? 1000 : limitParam ? parseInt(limitParam, 10) : 500;
+    const limit = limitParam === "all" ? 5000 : limitParam ? parseInt(limitParam, 10) : 5000;
 
     // 1. Fetch detection logs with camera info from database (up to limit)
     const { data: logsData, error: logsError } = await supabase
       .from("face_logs")
       .select("*, cameras(name, place)")
       .order("timestamp", { ascending: false })
-      .limit(isNaN(limit) ? 500 : limit);
+      .limit(isNaN(limit) ? 5000 : limit);
 
     if (logsError) {
       console.error("Supabase logs fetch error:", logsError);
@@ -84,19 +84,36 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * DELETE /api/face_logs?type=unknown or DELETE /api/face_logs?type=all
- * Deletes unknown face logs (or all logs) from Supabase face_logs table at once.
+ * DELETE /api/face_logs?id=XYZ or DELETE /api/face_logs?type=unknown|all
+ * Deletes individual face log by ID, or clear unknown / all logs from Supabase.
  */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const deleteType = searchParams.get("type") || "unknown";
+    const id = searchParams.get("id");
+    const deleteType = searchParams.get("type");
 
-    const query = supabase.from("face_logs").delete();
+    if (id) {
+      const { data, error } = await supabase
+        .from("face_logs")
+        .delete()
+        .eq("id", id)
+        .select();
+
+      if (error) {
+        console.error("Error deleting face log by id:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Deleted face log record ${id}.`,
+        deleted_count: data?.length || 0,
+      });
+    }
 
     if (deleteType === "unknown") {
-      // Delete only true unknown logs. Never match on person_id.is.null —
-      // visitors are stored with person_id = null and must be preserved.
+      // Delete only true unknown logs.
       const { data, error } = await supabase
         .from("face_logs")
         .delete()
@@ -132,7 +149,7 @@ export async function DELETE(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: "Invalid delete type. Use 'unknown' or 'all'." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid delete parameter. Pass 'id' or 'type=unknown|all'." }, { status: 400 });
   } catch (err: any) {
     console.error("DELETE /api/face_logs error:", err);
     return NextResponse.json({ error: err.message || "Failed to delete face logs" }, { status: 500 });

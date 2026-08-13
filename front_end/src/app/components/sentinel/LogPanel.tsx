@@ -278,9 +278,48 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
       }
     } catch {
       setDeleteMsg("Error.");
+      setIsDeleting(false);
+      setTimeout(() => setDeleteMsg(""), 3500);
+    }
+  };
+
+  const handleDeleteAllLogs = async () => {
+    if (!window.confirm("Are you sure you want to delete ALL face detection logs from the database? This action cannot be undone.")) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/face_logs?type=all", { method: "DELETE" });
+      if (res.ok) {
+        const data = await res.json();
+        setDeleteMsg(data.deleted_count !== undefined ? `Cleared (${data.deleted_count})!` : "Cleared All!");
+        setAllLogs([]);
+        if (selectedLog) setSelectedLog(null);
+        fetchFilteredLogs();
+      } else {
+        setDeleteMsg("Failed to clear all logs.");
+      }
+    } catch {
+      setDeleteMsg("Error clearing logs.");
     }
     setIsDeleting(false);
     setTimeout(() => setDeleteMsg(""), 3500);
+  };
+
+  const handleDeleteSingleLog = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm("Delete this face detection log entry?")) return;
+    try {
+      const res = await fetch(`/api/face_logs?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (res.ok) {
+        setAllLogs(prev => prev.filter(l => l.id !== id));
+        if (selectedLog?.id === id) setSelectedLog(null);
+      } else {
+        alert("Failed to delete log entry.");
+      }
+    } catch (err) {
+      console.error("Single log delete error:", err);
+    }
   };
 
   // Export CSV
@@ -694,7 +733,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
           <button
             onClick={handleDeleteUnknown}
             disabled={isDeleting || unknownCount === 0}
-            title="Delete all unknown logs from database"
+            title="Delete all unknown face logs from database"
             style={{
               background: unknownCount > 0 ? "rgba(239,68,68,0.1)" : "#f1f5f9",
               border: `1px solid ${unknownCount > 0 ? "rgba(239,68,68,0.3)" : "#cbd5e1"}`,
@@ -707,17 +746,51 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             <Trash2 size={12} color={unknownCount > 0 ? "#dc2626" : "#94a3b8"} />
             {deleteMsg || "Clear Unknowns"}
           </button>
+
+          {/* Clear All Logs button */}
+          <button
+            onClick={handleDeleteAllLogs}
+            disabled={isDeleting || allLogs.length === 0}
+            title="Delete ALL face detection logs from database"
+            style={{
+              background: allLogs.length > 0 ? "rgba(220,38,38,0.12)" : "#f1f5f9",
+              border: `1px solid ${allLogs.length > 0 ? "rgba(220,38,38,0.4)" : "#cbd5e1"}`,
+              borderRadius: 8, padding: "5.5px 10px", cursor: allLogs.length > 0 ? "pointer" : "not-allowed",
+              color: allLogs.length > 0 ? "#b91c1c" : "#94a3b8",
+              fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
+              transition: "all 0.2s",
+            }}
+          >
+            <Trash2 size={12} color={allLogs.length > 0 ? "#b91c1c" : "#94a3b8"} />
+            Clear All Logs
+          </button>
         </div>
       </div>
 
-      {/* Search results summary count */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, fontSize: 11, color: "#64748b" }}>
+      {/* Search results summary count & page size selector */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, fontSize: 11, color: "#64748b", flexWrap: "wrap", gap: 8 }}>
         <span>
           Showing <strong>{filteredAndSortedLogs.length}</strong> of <strong>{allLogs.length}</strong> database logs
           {searchQuery && ` matching "${searchQuery}"`}
         </span>
         {viewMode !== "kanban" && viewMode !== "calendar" && filteredAndSortedLogs.length > 0 && (
-          <span>Page {currentPage} of {totalPages}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              Show per page:
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                style={{ padding: "2px 6px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11, fontWeight: 700, background: "#ffffff" }}
+              >
+                <option value={12}>12</option>
+                <option value={24}>24</option>
+                <option value={48}>48</option>
+                <option value={100}>100</option>
+                <option value={5000}>All (Range Max)</option>
+              </select>
+            </span>
+            <span>Page {currentPage} of {totalPages}</span>
+          </div>
         )}
       </div>
 
@@ -924,10 +997,15 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                               )}
                               {log.department && <span style={{ fontSize: 9.5, color: "#64748b", fontWeight: 600 }}>{log.department}</span>}
                             </div>
-                            <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 9px", fontSize: 9.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                              <Maximize2 size={10} color="#334155" />
-                              Inspect
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "3px 7px", fontSize: 9.5, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                <Trash2 size={10} color="#dc2626" />
+                              </button>
+                              <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 9px", fontSize: 9.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                <Maximize2 size={10} color="#334155" />
+                                Inspect
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1018,10 +1096,15 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 {/* Footer Action */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                   <span style={{ fontSize: 9, color: "#64748b" }}>ID: {log.id.slice(0, 8)}...</span>
-                  <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                    <Maximize2 size={11} color="#334155" />
-                    Inspect
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "3px 7px", fontSize: 10, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <Trash2 size={11} color="#dc2626" />
+                    </button>
+                    <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                      <Maximize2 size={11} color="#334155" />
+                      Inspect
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -1063,10 +1146,15 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                       <Clock size={10} color="#64748b" />
                       {timeAgo(ts)}
                     </span>
-                    <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Maximize2 size={11} color="#334155" />
-                      Inspect
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "2px 7px", fontSize: 10, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <Trash2 size={11} color="#dc2626" />
+                      </button>
+                      <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <Maximize2 size={11} color="#334155" />
+                        Inspect
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1190,10 +1278,15 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                       <div style={{ fontSize: 9, color: "#94a3b8" }}>{formatDate(ts)}</div>
                     </td>
                     <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                      <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <Maximize2 size={11} color="#334155" />
-                        Inspect
-                      </button>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "4px 8px", fontSize: 10.5, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                          <Trash2 size={11} color="#dc2626" />
+                        </button>
+                        <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <Maximize2 size={11} color="#334155" />
+                          Inspect
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1261,7 +1354,10 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
                         <ConfidenceMeter value={log.confidence} color={col.color} />
 
-                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                          <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 5, padding: "2px 7px", fontSize: 9.5, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            <Trash2 size={10} color="#dc2626" />
+                          </button>
                           <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 5, padding: "2px 8px", fontSize: 9.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                             <Maximize2 size={10} color="#334155" />
                             Inspect
@@ -1437,29 +1533,38 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
               <button
-                onClick={() => copyToClipboard(selectedLog.id, "id")}
-                style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                onClick={() => handleDeleteSingleLog(selectedLog.id)}
+                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
               >
-                {copiedField === "id" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
-                {copiedField === "id" ? "Copied ID!" : "Copy Log ID"}
+                <Trash2 size={12} color="#dc2626" />
+                Delete Log Record
               </button>
-              {selectedLog.snapshot_url && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button
-                  onClick={() => copyToClipboard(selectedLog.snapshot_url!, "url")}
+                  onClick={() => copyToClipboard(selectedLog.id, "id")}
                   style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
-                  {copiedField === "url" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
-                  {copiedField === "url" ? "Copied Link!" : "Copy Snapshot Link"}
+                  {copiedField === "id" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
+                  {copiedField === "id" ? "Copied ID!" : "Copy Log ID"}
                 </button>
-              )}
-              <button
-                onClick={() => setSelectedLog(null)}
-                style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-              >
-                Close Details
-              </button>
+                {selectedLog.snapshot_url && (
+                  <button
+                    onClick={() => copyToClipboard(selectedLog.snapshot_url!, "url")}
+                    style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                  >
+                    {copiedField === "url" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
+                    {copiedField === "url" ? "Copied Link!" : "Copy Snapshot Link"}
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
         </div>
