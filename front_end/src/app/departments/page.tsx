@@ -32,18 +32,18 @@ interface Department {
   created_at?: string;
 }
 
-const INK = "#101B22";
-const MUTED = "#6B6558";
-const BORDER = "#E4E0D6";
+const INK = "var(--text-primary)";
+const MUTED = "var(--text-secondary)";
+const BORDER = "var(--border-strong)";
 const TEAL = "#1F6F5C";
 const TEAL_DEEP = "#164F42";
 const RUST = "#B3432B";
 
 const fieldClass =
-  "w-full bg-[#F7F5F0] border border-[#E4E0D6] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[#101B22] outline-none transition-colors duration-150 focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10 placeholder:text-[#B0A996]";
+  "w-full bg-[var(--bg-input)] border border-[var(--border-strong)] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[var(--text-primary)] outline-none transition-colors duration-150 focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10 placeholder:text-[var(--text-muted)]";
 
 const labelClass =
-  "block text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[#8A8375] mb-2";
+  "block text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-muted)] mb-2";
 
 function Stat({
   label,
@@ -59,7 +59,7 @@ function Stat({
       <span className="erg-font-display text-[19px] font-bold" style={{ color }}>
         {value}
       </span>
-      <span className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#9C9585]">
+      <span className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
         {label}
       </span>
     </div>
@@ -246,7 +246,7 @@ export default function DepartmentsPage() {
         </div>
 
         <div
-          className="flex items-center gap-5 rounded-2xl px-6 py-3.5 bg-white"
+          className="flex items-center gap-5 rounded-2xl px-6 py-3.5 bg-[var(--bg-panel)]"
           style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,27,34,0.04)" }}
         >
           <Stat label="Departments" value={departments.length} />
@@ -259,7 +259,7 @@ export default function DepartmentsPage() {
 
       {/* Toolbar */}
       <div
-        className="bg-white rounded-2xl p-4 flex flex-wrap gap-4 items-center mb-6"
+        className="bg-[var(--bg-panel)] rounded-2xl p-4 flex flex-wrap gap-4 items-center mb-6"
         style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,27,34,0.03)" }}
       >
         <button
@@ -276,7 +276,7 @@ export default function DepartmentsPage() {
 
         {/* Search */}
         <div className="relative flex-1 min-w-[260px]">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#A9A192" }} />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
           <input
             type="text"
             placeholder="Search departments by name, code, or floor location…"
@@ -290,7 +290,7 @@ export default function DepartmentsPage() {
         <button
           onClick={fetchDepartments}
           title="Reload department list"
-          className="rounded-xl w-10 h-10 flex items-center justify-center transition-colors hover:bg-[#F7F5F0]"
+          className="rounded-xl w-10 h-10 flex items-center justify-center transition-colors hover:bg-[var(--bg-hover)]"
           style={{ border: `1px solid ${BORDER}`, color: MUTED }}
         >
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -305,7 +305,7 @@ export default function DepartmentsPage() {
         </div>
       ) : error ? (
         <div
-          className="flex flex-col items-center gap-3 py-14 px-5 rounded-2xl bg-white"
+          className="flex flex-col items-center gap-3 py-14 px-5 rounded-2xl bg-[var(--bg-panel)]"
           style={{ color: RUST, border: `1px solid ${BORDER}` }}
         >
           <AlertTriangle size={30} />
@@ -320,7 +320,7 @@ export default function DepartmentsPage() {
         </div>
       ) : filteredDepts.length === 0 ? (
         <div
-          className="text-center py-20 px-6 bg-white rounded-2xl"
+          className="text-center py-20 px-6 bg-[var(--bg-panel)] rounded-2xl"
           style={{ border: `1px solid ${BORDER}`, color: MUTED }}
         >
           <Building2 size={44} className="mx-auto mb-4" style={{ opacity: 0.22 }} />
@@ -334,11 +334,11 @@ export default function DepartmentsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))" }}>
+        <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(330px, 100%), 1fr))" }}>
           {filteredDepts.map((dept) => (
             <div
               key={dept.id}
-              className="erg-card bg-white rounded-2xl overflow-hidden flex flex-col relative transition-all duration-200 hover:shadow-[0_10px_28px_rgba(16,27,34,0.08)]"
+              className="erg-card bg-[var(--bg-panel)] rounded-2xl overflow-hidden flex flex-col relative transition-all duration-200 hover:shadow-[0_10px_28px_rgba(16,27,34,0.08)]"
               style={{ border: `1px solid ${BORDER}` }}
             >
               {/* Status accent strip */}
@@ -362,7 +362,7 @@ export default function DepartmentsPage() {
               </button>
 
               {/* Card Header */}
-              <div className="p-5 pl-6 flex items-start gap-3.5" style={{ borderBottom: "1px solid #F1EEE6" }}>
+              <div className="p-5 pl-6 flex items-start gap-3.5" style={{ borderBottom: "1px solid var(--border)" }}>
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-[14px] erg-font-mono flex-shrink-0"
                   style={{ background: "rgba(31,111,92,0.08)", color: TEAL_DEEP, border: `1px solid ${BORDER}` }}
@@ -388,7 +388,7 @@ export default function DepartmentsPage() {
                   {dept.description || "No detailed description provided for this department."}
                 </p>
 
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#F7F5F0]" style={{ border: `1px solid ${BORDER}` }}>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-input)]" style={{ border: `1px solid ${BORDER}` }}>
                   <div className="flex items-center gap-2">
                     <Users size={16} style={{ color: TEAL }} />
                     <span className="text-[12px] font-semibold" style={{ color: INK }}>
@@ -409,7 +409,7 @@ export default function DepartmentsPage() {
               {/* Card Footer */}
               <div
                 className="px-5 pl-6 py-3 flex justify-between items-center"
-                style={{ borderTop: "1px solid #F1EEE6", background: "#FBFAF7" }}
+                style={{ borderTop: "1px solid var(--border)", background: "var(--bg-input)" }}
               >
                 <Link
                   href={`/employees?dept=${encodeURIComponent(dept.name)}`}
@@ -452,7 +452,7 @@ export default function DepartmentsPage() {
             onClick={() => setShowDrawer(false)}
           />
           <div
-            className="erg-drawer fixed top-0 right-0 bottom-0 w-full sm:w-[460px] bg-white z-[100] flex flex-col"
+            className="erg-drawer fixed top-0 right-0 bottom-0 w-full sm:w-[460px] bg-[var(--bg-panel)] z-[100] flex flex-col"
             style={{ boxShadow: "-10px 0 40px rgba(16,27,34,0.14)", borderLeft: `1px solid ${BORDER}` }}
           >
             <div className="px-6 py-5 flex justify-between items-center" style={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -466,8 +466,8 @@ export default function DepartmentsPage() {
               </div>
               <button
                 onClick={() => setShowDrawer(false)}
-                className="rounded-full w-8 h-8 flex items-center justify-center transition-colors hover:bg-[#F1EEE6]"
-                style={{ background: "#F7F5F0", color: MUTED }}
+                className="rounded-full w-8 h-8 flex items-center justify-center transition-colors hover:bg-[var(--border)]"
+                style={{ background: "var(--bg-input)", color: MUTED }}
               >
                 <X size={16} />
               </button>
@@ -523,7 +523,7 @@ export default function DepartmentsPage() {
 
                 <label
                   htmlFor="isActiveDeptToggle"
-                  className="flex items-center gap-3 mt-1 rounded-xl px-3.5 py-3 cursor-pointer transition-colors hover:bg-[#F7F5F0]"
+                  className="flex items-center gap-3 mt-1 rounded-xl px-3.5 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
                   style={{ border: `1px solid ${BORDER}` }}
                 >
                   <input
@@ -563,8 +563,8 @@ export default function DepartmentsPage() {
                   <button
                     type="button"
                     onClick={() => setShowDrawer(false)}
-                    className="flex-1 rounded-xl py-3 text-[13.5px] font-bold hover:bg-[#F1EEE6]"
-                    style={{ background: "#F7F5F0", border: `1px solid ${BORDER}`, color: "#374151" }}
+                    className="flex-1 rounded-xl py-3 text-[13.5px] font-bold hover:bg-[var(--border)]"
+                    style={{ background: "var(--bg-input)", border: `1px solid ${BORDER}`, color: "var(--text-secondary)" }}
                   >
                     Cancel
                   </button>

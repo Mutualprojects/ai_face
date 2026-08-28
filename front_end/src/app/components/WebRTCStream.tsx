@@ -52,7 +52,7 @@ function Chip({ dot, label, tint }: { dot: string; label: string; tint?: string 
   return (
     <div style={{
       display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 700,
-      background: "#ffffff", border: "1px solid var(--border)",
+      background: "var(--bg-card)", border: "1px solid var(--border)",
       borderRadius: 99, padding: "5px 11px", boxShadow: "var(--shadow-sm)",
       color: tint || "var(--text-secondary)", whiteSpace: "nowrap"
     }}>
@@ -62,7 +62,7 @@ function Chip({ dot, label, tint }: { dot: string; label: string; tint?: string 
   );
 }
 
-export default function WebRTCStream({ streamName = "camera1", serverPort = "8889", initialTab = "register", detectionOnly = false }: Props) {
+export default function WebRTCStream({ streamName = "camera1", serverPort = "8891", initialTab = "register", detectionOnly = false }: Props) {
   // Computed on client only to avoid SSR/client hydration mismatch
   const [backendUrl, setBackendUrl] = useState("http://127.0.0.1:5000");
   const [cleanView, setCleanView] = useState(detectionOnly);
@@ -171,7 +171,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
   const startHLS = useCallback(() => {
     cleanup(); setPS("connecting"); setErrMsg("");
     const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    const hlsPort = "8888";
+    const hlsPort = "8892";
     const url = `http://${host}:${hlsPort}/${streamName}/index.m3u8`;
     const v = videoRef.current; if (!v) return;
     if (Hls.isSupported()) {
@@ -264,17 +264,29 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
 
       pc.createOffer()
         .then(o => pc.setLocalDescription(o))
-        .then(() => {
+        .then(async () => {
           if (!alive()) return;
-          return fetch(webrtcUrl, {
-            method: "POST",
-            body: pc.localDescription?.sdp,
-            headers: { "Content-Type": "application/sdp" },
-          });
-        })
-        .then(res => {
-          if (!res) return;
-          if (!res.ok) throw new Error("MediaMTX WHEP offer rejected");
+          const sdp = pc.localDescription?.sdp;
+          if (!sdp) throw new Error("No local SDP description");
+
+          let res: Response | null = null;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            if (!alive()) return;
+            try {
+              res = await fetch(webrtcUrl, {
+                method: "POST",
+                body: sdp,
+                headers: { "Content-Type": "application/sdp" },
+              });
+              if (res.ok) break;
+            } catch (e) {
+              // network exception
+            }
+            if (attempt < 4) {
+              await new Promise((r) => setTimeout(r, 800));
+            }
+          }
+          if (!res || !res.ok) throw new Error(`MediaMTX WHEP offer rejected (${res?.status || "network"})`);
           return res.text();
         })
         .then(sdpAnswer => {
@@ -542,7 +554,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
                 }} />
               ) : (
                 <div style={{
-                  width: 84, height: 84, borderRadius: 12, background: "#e2e8f0",
+                  width: 84, height: 84, borderRadius: 12, background: "var(--bg-input)",
                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32
                 }}>👤</div>
               )}
@@ -552,7 +564,7 @@ export default function WebRTCStream({ streamName = "camera1", serverPort = "888
                   {modalDetection.det.name || "Unknown Person"}
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                  Match Confidence: <strong style={{ color: "#1e293b" }}>{Math.round((modalDetection.det.confidence || 0) * 100)}%</strong>
+                  Match Confidence: <strong style={{ color: "var(--text-primary)" }}>{Math.round((modalDetection.det.confidence || 0) * 100)}%</strong>
                 </div>
                 {modalDetection.det.det_score !== undefined && (
                   <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>

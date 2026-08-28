@@ -59,7 +59,7 @@ export default function LoginPage() {
     if (stored) {
       try {
         const sess = JSON.parse(stored);
-        if (sess?.access_token) router.replace("/");
+        if (sess?.access_token) router.replace("/dashboard");
       } catch {}
     }
   }, [router]);

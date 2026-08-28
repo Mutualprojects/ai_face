@@ -9,7 +9,7 @@ graceful_timeout = 30
 keepalive = 5
 max_requests = 0
 
-preload_app = True
+preload_app = False
 chdir = os.path.dirname(os.path.abspath(__file__))
 
 host = os.getenv("HOST", "0.0.0.0")

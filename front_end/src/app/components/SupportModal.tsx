@@ -307,9 +307,9 @@ ret, frame = cap.read()`;
           width: "100%",
           maxWidth: 960,
           maxHeight: "90vh",
-          background: "#ffffff",
+          background: "var(--bg-panel)",
           borderRadius: 20,
-          boxShadow: "0 25px 60px -15px rgba(0,0,0,0.3), 0 0 0 1px rgba(226,232,240,0.8)",
+          boxShadow: "0 25px 60px -15px rgba(0,0,0,0.5), 0 0 0 1px rgba(226,232,240,0.8)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -320,12 +320,12 @@ ret, frame = cap.read()`;
         <div
           style={{
             padding: "20px 24px",
-            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-            color: "#fff",
+background: "linear-gradient(135deg, var(--bg-sidebar) 0%, var(--bg-card) 100%)",
+            color: "var(--text-primary)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            borderBottom: "1px solid rgba(255,255,255,0.1)",
+            borderBottom: "1px solid var(--border)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -363,7 +363,7 @@ ret, frame = cap.read()`;
                   24/7 ONLINE
                 </span>
               </div>
-              <p style={{ margin: "2px 0 0 0", fontSize: 12, color: "#94a3b8" }}>
+              <p style={{ margin: "2px 0 0 0", fontSize: 12, color: "var(--text-muted)" }}>
                 AI Surveillance Assistant • Live System Diagnostics • Developer Docs • Helpdesk
               </p>
             </div>
@@ -373,7 +373,7 @@ ret, frame = cap.read()`;
             <span
               style={{
                 fontSize: 11,
-                color: "#64748b",
+                color: "var(--text-muted)",
                 fontFamily: "monospace",
                 background: "rgba(255,255,255,0.06)",
                 padding: "4px 8px",
@@ -390,7 +390,7 @@ ret, frame = cap.read()`;
                 borderRadius: 10,
                 background: "rgba(255,255,255,0.1)",
                 border: "none",
-                color: "#cbd5e1",
+                color: "var(--border-strong)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -411,8 +411,8 @@ ret, frame = cap.read()`;
             display: "flex",
             alignItems: "center",
             padding: "0 24px",
-            background: "#f8fafc",
-            borderBottom: "1px solid #e2e8f0",
+            background: "var(--bg-input)",
+            borderBottom: "1px solid var(--border-strong)",
             gap: 6,
           }}
         >
@@ -428,7 +428,7 @@ ret, frame = cap.read()`;
               background: "none",
               border: "none",
               borderBottom: activeTab === "copilot" ? "2.5px solid #6366f1" : "2.5px solid transparent",
-              color: activeTab === "copilot" ? "#6366f1" : "#64748b",
+              color: activeTab === "copilot" ? "#6366f1" : "var(--text-muted)",
               cursor: "pointer",
               transition: "all 0.15s",
             }}
@@ -449,7 +449,7 @@ ret, frame = cap.read()`;
               background: "none",
               border: "none",
               borderBottom: activeTab === "telemetry" ? "2.5px solid #6366f1" : "2.5px solid transparent",
-              color: activeTab === "telemetry" ? "#6366f1" : "#64748b",
+              color: activeTab === "telemetry" ? "#6366f1" : "var(--text-muted)",
               cursor: "pointer",
               transition: "all 0.15s",
             }}
@@ -470,7 +470,7 @@ ret, frame = cap.read()`;
               background: "none",
               border: "none",
               borderBottom: activeTab === "tickets" ? "2.5px solid #6366f1" : "2.5px solid transparent",
-              color: activeTab === "tickets" ? "#6366f1" : "#64748b",
+              color: activeTab === "tickets" ? "#6366f1" : "var(--text-muted)",
               cursor: "pointer",
               transition: "all 0.15s",
             }}
@@ -491,7 +491,7 @@ ret, frame = cap.read()`;
               background: "none",
               border: "none",
               borderBottom: activeTab === "kb" ? "2.5px solid #6366f1" : "2.5px solid transparent",
-              color: activeTab === "kb" ? "#6366f1" : "#64748b",
+              color: activeTab === "kb" ? "#6366f1" : "var(--text-muted)",
               cursor: "pointer",
               transition: "all 0.15s",
             }}
@@ -502,13 +502,13 @@ ret, frame = cap.read()`;
         </div>
 
         {/* Modal Main Body Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: 24, background: "#ffffff" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: 24, background: "var(--bg-panel)" }}>
           {/* TAB 1: AI COPILOT */}
           {activeTab === "copilot" && (
             <div style={{ display: "flex", flexDirection: "column", height: "460px", gap: 16 }}>
               {/* Preset Quick Question Chips */}
               <div>
-                <p style={{ margin: "0 0 8px 0", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                <p style={{ margin: "0 0 8px 0", fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
                   Quick Sentinel Assistance Topics
                 </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -519,23 +519,23 @@ ret, frame = cap.read()`;
                       style={{
                         padding: "6px 12px",
                         borderRadius: 8,
-                        background: "#f1f5f9",
-                        border: "1px solid #e2e8f0",
+                        background: "var(--bg-hover)",
+                        border: "1px solid var(--border-strong)",
                         fontSize: 12,
                         fontWeight: 600,
-                        color: "#334155",
+                        color: "var(--text-secondary)",
                         cursor: "pointer",
                         transition: "all 0.15s",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "#e0e7ff";
+                        e.currentTarget.style.background = "var(--violet-soft)";
                         e.currentTarget.style.color = "#4338ca";
                         e.currentTarget.style.borderColor = "#c7d2fe";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "#f1f5f9";
-                        e.currentTarget.style.color = "#334155";
-                        e.currentTarget.style.borderColor = "#e2e8f0";
+                        e.currentTarget.style.background = "var(--bg-hover)";
+                        e.currentTarget.style.color = "var(--text-secondary)";
+                        e.currentTarget.style.borderColor = "var(--border-strong)";
                       }}
                     >
                       {item.label}
@@ -551,8 +551,8 @@ ret, frame = cap.read()`;
                   overflowY: "auto",
                   padding: 16,
                   borderRadius: 14,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--border-strong)",
                   display: "flex",
                   flexDirection: "column",
                   gap: 14,
@@ -571,10 +571,10 @@ ret, frame = cap.read()`;
                         maxWidth: "80%",
                         padding: "12px 16px",
                         borderRadius: 14,
-                        background: msg.sender === "user" ? "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)" : "#ffffff",
-                        color: msg.sender === "user" ? "#ffffff" : "#1e293b",
+                        background: msg.sender === "user" ? "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)" : "var(--bg-panel)",
+                        color: msg.sender === "user" ? "#ffffff" : "var(--text-primary)",
                         boxShadow: msg.sender === "user" ? "0 4px 12px rgba(99,102,241,0.25)" : "0 2px 8px rgba(0,0,0,0.05)",
-                        border: msg.sender === "user" ? "none" : "1px solid #e2e8f0",
+                        border: msg.sender === "user" ? "none" : "1px solid var(--border-strong)",
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
@@ -593,7 +593,7 @@ ret, frame = cap.read()`;
                             marginTop: 10,
                             padding: 10,
                             borderRadius: 8,
-                            background: "#0f172a",
+                            background: "var(--bg-sidebar)",
                             color: "#38bdf8",
                             fontFamily: "monospace",
                             fontSize: 11.5,
@@ -639,7 +639,7 @@ ret, frame = cap.read()`;
                 ))}
 
                 {isTyping && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#64748b", fontSize: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 12 }}>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6366f1", animation: "ping 1s infinite" }} />
                     Sentinel Copilot is thinking...
                   </div>
@@ -658,7 +658,7 @@ ret, frame = cap.read()`;
                     flex: 1,
                     padding: "12px 16px",
                     borderRadius: 12,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-strong)",
                     fontSize: 13,
                     outline: "none",
                   }}
@@ -692,49 +692,49 @@ ret, frame = cap.read()`;
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {/* Telemetry Grid Stats */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-                <div style={{ padding: 16, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ padding: 16, borderRadius: 14, background: "var(--bg-input)", border: "1px solid var(--border-strong)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>Server Latency</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>Server Latency</span>
                     <Wifi size={18} color="#6366f1" />
                   </div>
-                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "#0f172a" }}>23 ms</p>
+                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "var(--text-primary)" }}>23 ms</p>
                   <span style={{ fontSize: 11, color: "#10b981", fontWeight: 700 }}>● Optimal Connection</span>
                 </div>
 
-                <div style={{ padding: 16, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ padding: 16, borderRadius: 14, background: "var(--bg-input)", border: "1px solid var(--border-strong)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>WebRTC Stream Matrix</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>WebRTC Stream Matrix</span>
                     <Radio size={18} color="#3b82f6" />
                   </div>
-                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "#0f172a" }}>29.8 FPS</p>
+                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "var(--text-primary)" }}>29.8 FPS</p>
                   <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 700 }}>2 Active Streams</span>
                 </div>
 
-                <div style={{ padding: 16, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ padding: 16, borderRadius: 14, background: "var(--bg-input)", border: "1px solid var(--border-strong)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>ArcFace RAM Cache</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>ArcFace RAM Cache</span>
                     <Cpu size={18} color="#8b5cf6" />
                   </div>
-                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "#0f172a" }}>1,240 Faces</p>
+                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "var(--text-primary)" }}>1,240 Faces</p>
                   <span style={{ fontSize: 11, color: "#8b5cf6", fontWeight: 700 }}>Atomic Snapshot Synced</span>
                 </div>
 
-                <div style={{ padding: 16, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ padding: 16, borderRadius: 14, background: "var(--bg-input)", border: "1px solid var(--border-strong)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>Supabase Database</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)" }}>Supabase Database</span>
                     <Database size={18} color="#10b981" />
                   </div>
-                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "#0f172a" }}>14 ms</p>
+                  <p style={{ margin: "10px 0 0 0", fontSize: 24, fontWeight: 900, color: "var(--text-primary)" }}>14 ms</p>
                   <span style={{ fontSize: 11, color: "#10b981", fontWeight: 700 }}>Query Pool Healthy</span>
                 </div>
               </div>
 
               {/* Automated Self Diagnostic Tool */}
-              <div style={{ padding: 20, borderRadius: 16, background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", color: "#fff" }}>
+              <div style={{ padding: 20, borderRadius: 16, background: "linear-gradient(135deg, var(--bg-sidebar) 0%, var(--bg-card) 100%)", color: "var(--text-primary)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Automated System Self-Diagnostic Test</h3>
-                    <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#94a3b8" }}>
+                    <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "var(--text-muted)" }}>
                       Run comprehensive health checks across Flask backend, Supabase DB, WebRTC streams, and GPU face model.
                     </p>
                   </div>
@@ -765,7 +765,7 @@ ret, frame = cap.read()`;
                 {/* Progress bar */}
                 {diagRunning && (
                   <div style={{ marginTop: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#cbd5e1", marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--border-strong)", marginBottom: 6 }}>
                       <span>{diagStep}</span>
                       <span>{diagProgress}%</span>
                     </div>
@@ -802,7 +802,7 @@ ret, frame = cap.read()`;
                           <CheckCircle2 size={16} color="#34d399" />
                           <span style={{ fontWeight: 700 }}>{res.name}</span>
                         </div>
-                        <span style={{ fontSize: 12, color: "#94a3b8" }}>{res.details}</span>
+                        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{res.details}</span>
                       </div>
                     ))}
                   </div>
@@ -815,9 +815,9 @@ ret, frame = cap.read()`;
           {activeTab === "tickets" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
               {/* Form to submit new ticket */}
-              <div style={{ padding: 20, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 800, color: "#0f172a" }}>Submit Support Incident</h3>
-                <p style={{ margin: "0 0 16px 0", fontSize: 12, color: "#64748b" }}>
+              <div style={{ padding: 20, borderRadius: 16, background: "var(--bg-input)", border: "1px solid var(--border-strong)" }}>
+                <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>Submit Support Incident</h3>
+                <p style={{ margin: "0 0 16px 0", fontSize: 12, color: "var(--text-muted)" }}>
                   Direct escalation to Sentinel Tier-3 surveillance engineers.
                 </p>
 
@@ -826,9 +826,9 @@ ret, frame = cap.read()`;
                     style={{
                       padding: 12,
                       borderRadius: 10,
-                      background: "#dcfce7",
-                      border: "1px solid #86efac",
-                      color: "#166534",
+                      background: "rgba(16,185,129,0.12)",
+                      border: "1px solid rgba(16,185,129,0.3)",
+                      color: "var(--text-primary)",
                       fontSize: 13,
                       fontWeight: 700,
                       marginBottom: 14,
@@ -843,7 +843,7 @@ ret, frame = cap.read()`;
 
                 <form onSubmit={handleSubmitTicket} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
                       Subject
                     </label>
                     <input
@@ -852,19 +852,19 @@ ret, frame = cap.read()`;
                       placeholder="e.g., Camera 2 dropping frames"
                       value={ticketSubject}
                       onChange={(e) => setTicketSubject(e.target.value)}
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)", fontSize: 13 }}
                     />
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
                         Category
                       </label>
                       <select
                         value={ticketCategory}
                         onChange={(e) => setTicketCategory(e.target.value)}
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)", fontSize: 13 }}
                       >
                         <option value="Camera Stream">Camera Stream</option>
                         <option value="Face Match Mismatch">Face Match Mismatch</option>
@@ -875,13 +875,13 @@ ret, frame = cap.read()`;
                     </div>
 
                     <div>
-                      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
                         Priority
                       </label>
                       <select
                         value={ticketPriority}
                         onChange={(e) => setTicketPriority(e.target.value)}
-                        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}
+                        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)", fontSize: 13 }}
                       >
                         <option value="Low">Low</option>
                         <option value="Medium">Medium</option>
@@ -892,7 +892,7 @@ ret, frame = cap.read()`;
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
                       Description & Logs
                     </label>
                     <textarea
@@ -901,7 +901,7 @@ ret, frame = cap.read()`;
                       placeholder="Describe what happened, error messages, or camera location..."
                       value={ticketDescription}
                       onChange={(e) => setTicketDescription(e.target.value)}
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, resize: "none" }}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)", fontSize: 13, resize: "none" }}
                     />
                   </div>
 
@@ -930,7 +930,7 @@ ret, frame = cap.read()`;
 
               {/* Recent tickets list */}
               <div>
-                <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 800, color: "#0f172a" }}>Recent Tickets</h3>
+                <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>Recent Tickets</h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {tickets.map((t) => (
                     <div
@@ -938,8 +938,8 @@ ret, frame = cap.read()`;
                       style={{
                         padding: 14,
                         borderRadius: 12,
-                        border: "1px solid #e2e8f0",
-                        background: "#ffffff",
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
                         boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
                       }}
                     >
@@ -951,15 +951,15 @@ ret, frame = cap.read()`;
                             fontWeight: 800,
                             padding: "2px 8px",
                             borderRadius: 99,
-                            background: t.status === "Resolved" ? "#dcfce7" : "#fef3c7",
-                            color: t.status === "Resolved" ? "#166534" : "#92400e",
+                            background: t.status === "Resolved" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
+                            color: t.status === "Resolved" ? "var(--text-primary)" : "var(--text-primary)",
                           }}
                         >
                           {t.status}
                         </span>
                       </div>
-                      <h4 style={{ margin: "0 0 4px 0", fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{t.subject}</h4>
-                      <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#64748b" }}>
+                      <h4 style={{ margin: "0 0 4px 0", fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{t.subject}</h4>
+                      <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--text-muted)" }}>
                         <span>📁 {t.category}</span>
                         <span>⚠️ {t.priority}</span>
                         <span>🕒 {t.date}</span>
@@ -976,7 +976,7 @@ ret, frame = cap.read()`;
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {/* Search bar */}
               <div style={{ position: "relative" }}>
-                <Search size={18} color="#94a3b8" style={{ position: "absolute", left: 14, top: 12 }} />
+                <Search size={18} color="var(--text-muted)" style={{ position: "absolute", left: 14, top: 12 }} />
                 <input
                   type="text"
                   placeholder="Search Sentinel guides, RTSP setup, Webhooks, ArcFace embeddings..."
@@ -986,7 +986,7 @@ ret, frame = cap.read()`;
                     width: "100%",
                     padding: "10px 14px 10px 42px",
                     borderRadius: 12,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-strong)",
                     fontSize: 13,
                     outline: "none",
                   }}
@@ -1002,8 +1002,8 @@ ret, frame = cap.read()`;
                       key={art.id}
                       style={{
                         borderRadius: 14,
-                        border: "1px solid #e2e8f0",
-                        background: "#ffffff",
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
                         overflow: "hidden",
                         transition: "all 0.2s",
                       }}
@@ -1016,28 +1016,28 @@ ret, frame = cap.read()`;
                           alignItems: "center",
                           justifyContent: "space-between",
                           cursor: "pointer",
-                          background: isExpanded ? "#f8fafc" : "#ffffff",
+                          background: isExpanded ? "var(--bg-input)" : "var(--bg-panel)",
                         }}
                       >
                         <div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                            <span style={{ fontSize: 10, fontWeight: 800, color: "#6366f1", background: "#e0e7ff", padding: "2px 8px", borderRadius: 6 }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, color: "#6366f1", background: "var(--violet-soft)", padding: "2px 8px", borderRadius: 6 }}>
                               {art.category}
                             </span>
-                            <span style={{ fontSize: 11, color: "#94a3b8" }}>{art.readTime}</span>
+                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{art.readTime}</span>
                           </div>
-                          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{art.title}</h4>
-                          <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#64748b" }}>{art.summary}</p>
+                          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{art.title}</h4>
+                          <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "var(--text-muted)" }}>{art.summary}</p>
                         </div>
                         <ChevronRight
                           size={18}
-                          color="#64748b"
+                          color="var(--text-muted)"
                           style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
                         />
                       </div>
 
                       {isExpanded && (
-                        <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid #f1f5f9", fontSize: 13, color: "#334155", lineHeight: 1.6 }}>
+                        <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid var(--bg-hover)", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
                           <pre style={{ whiteSpace: "pre-line", fontFamily: "inherit", margin: "12px 0 0 0" }}>{art.content}</pre>
                         </div>
                       )}

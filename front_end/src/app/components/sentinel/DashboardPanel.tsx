@@ -187,11 +187,11 @@ export default function SentinelDashboard() {
     };
   }, [filteredVisitors]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-white text-slate-800">Loading Sentinel Core...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[var(--bg-panel)] text-[var(--text-primary)]">Loading Sentinel Core...</div>;
 
   return (
     <div
-      className="relative min-h-screen w-full overflow-hidden font-sans text-slate-800 selection:bg-indigo-500/20"
+      className="relative min-h-screen w-full overflow-hidden font-sans text-[var(--text-primary)] selection:bg-indigo-500/20"
       style={{
         backgroundImage: `url('${BG_IMAGE}')`,
         backgroundSize: 'cover',
@@ -200,8 +200,8 @@ export default function SentinelDashboard() {
       }}
     >
       {/* Premium Ambient Glass Overlay */}
-      <div className="absolute inset-0 bg-slate-50/40 backdrop-blur-[6px] z-0"></div>
-      <div className="absolute inset-0 bg-gradient-to-br from-white/70 via-white/30 to-white/10 z-0"></div>
+      <div className="absolute inset-0 bg-[var(--bg-deep)]/60 backdrop-blur-[6px] z-0"></div>
+      <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-deep)]/70 via-[var(--bg-deep)]/30 to-[var(--bg-deep)]/10 z-0"></div>
 
       <div className="relative z-10 w-full p-[5px] space-y-6">
 
@@ -212,16 +212,16 @@ export default function SentinelDashboard() {
 
           </div>
 
-          <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 shadow-sm">
+          <div className="flex items-center gap-4 bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-xl px-4 py-2 shadow-sm">
             <div className="text-right">
-              <div className="text-2xl font-mono font-semibold leading-none text-slate-800">
+              <div className="text-2xl font-mono font-semibold leading-none text-[var(--text-primary)]">
                 {currentTime.toLocaleTimeString([], { hour12: false })}
               </div>
-              <div className="text-xs text-slate-500 uppercase tracking-wider font-medium">
+              <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium">
                 {currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
               </div>
             </div>
-            <div className="h-8 w-[1px] bg-slate-200 mx-2" />
+            <div className="h-8 w-[1px] bg-[var(--border-strong)] mx-2" />
             <div className="flex flex-col items-center">
               <span className="relative flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -273,11 +273,11 @@ export default function SentinelDashboard() {
           {/* Main Traffic Chart */}
           <div className="lg:col-span-2 glass-panel p-6 rounded-2xl min-h-[350px]">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
                 <Activity size={18} className="text-indigo-600" />
                 Visitor Traffic Trend
               </h3>
-              <select className="bg-slate-50 border border-slate-200 text-xs rounded-lg px-2 py-1 outline-none text-slate-700 focus:border-indigo-500">
+              <select className="bg-[var(--bg-input)] border border-[var(--border-strong)] text-xs rounded-lg px-2 py-1 outline-none text-[var(--text-secondary)] focus:border-indigo-500">
                 <option>Last 7 Days</option>
                 <option>Last 30 Days</option>
               </select>
@@ -291,10 +291,10 @@ export default function SentinelDashboard() {
                       <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} tickLine={false} />
+                  <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-strong)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
                   <Area type="monotone" dataKey="visits" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorTraffic)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -303,7 +303,7 @@ export default function SentinelDashboard() {
 
           {/* Traffic breakdown */}
           <div className="glass-panel p-6 rounded-2xl flex flex-col justify-between">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Visit Purpose</h3>
+            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Visit Purpose</h3>
             <div className="h-[180px] w-full relative flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -327,16 +327,16 @@ export default function SentinelDashboard() {
                       { name: 'Delivery', value: 20, color: COLORS.amber },
                       { name: 'Other', value: 10, color: COLORS.rose },
                     ].map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(255,255,255,0.8)" />
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="var(--bg-card)" />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-strong)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
                 </PieChart>
               </ResponsiveContainer>
               {/* Center Text */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-3xl font-bold text-slate-800">{metrics.total}</span>
-                <span className="text-xs text-slate-500 uppercase">Total</span>
+                <span className="text-3xl font-bold text-[var(--text-primary)]">{metrics.total}</span>
+                <span className="text-xs text-[var(--text-muted)] uppercase">Total</span>
               </div>
             </div>
             <div className="mt-4 space-y-2">
@@ -344,49 +344,89 @@ export default function SentinelDashboard() {
                 <div key={item} className="flex justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: [COLORS.indigo, COLORS.emerald, COLORS.amber, COLORS.rose][i] }} />
-                    <span className="text-slate-600">{item}</span>
+                    <span className="text-[var(--text-secondary)]">{item}</span>
                   </div>
-                  <span className="font-mono text-slate-500">{[45, 25, 20, 10][i]}%</span>
+                  <span className="font-mono text-[var(--text-muted)]">{[45, 25, 20, 10][i]}%</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
+        {/* Activity Log Section */}
+        <div className="glass-panel rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2 mb-4">
+            <Activity size={18} className="text-indigo-600" />
+            Recent Activity
+          </h3>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+            {logs.slice(0, 20).map((log, idx) => (
+              <div key={log.id} className="flex items-center gap-3">
+                <div className="flex flex-col items-center">
+                  <div className={`w-2.5 h-2.5 rounded-full ${log.status === 'Authorized' ? 'bg-emerald-500' : log.status === 'Flagged' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                  {idx < Math.min(logs.length, 20) - 1 && (
+                    <div className="w-[1px] h-6 bg-[var(--border)] mt-1" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[var(--text-primary)] truncate">{log.person_name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${log.status === 'Authorized' ? 'bg-emerald-500/10 text-emerald-600' : log.status === 'Flagged' ? 'bg-amber-500/10 text-amber-600' : 'bg-red-500/10 text-red-600'}`}>
+                      {log.status}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
+                    {log.confidence.toFixed(1)}% confidence
+                  </div>
+                </div>
+                <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap flex-shrink-0">
+                  {timeAgo(log.timestamp)}
+                </span>
+              </div>
+            ))}
+            {logs.length === 0 && (
+              <div className="text-center py-8 text-[var(--text-muted)] text-xs">
+                <Activity className="mx-auto opacity-20 mb-2" size={24} />
+                <p>No face detection events yet.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Visitor Directory Section - Kanban, Grid, List views */}
         <div className="glass-panel rounded-2xl overflow-hidden shadow-md">
           {/* Header & View Mode Selectors */}
-          <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-50/50">
+          <div className="p-6 border-b border-[var(--border)] flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-[var(--bg-hover)]/50">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-amber-500/10 rounded-lg text-amber-600">
                 <Camera size={20} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-800">Visitor Directory</h3>
-                <p className="text-xs text-slate-500">Live presence monitor & activity ledger</p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">Visitor Directory</h3>
+                <p className="text-xs text-[var(--text-muted)]">Live presence monitor & activity ledger</p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               {/* Search Bar */}
               <div className="relative flex-1 min-w-[200px] max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={15} />
                 <input
                   type="text"
                   placeholder="Search visitors..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-[var(--bg-input)] border border-[var(--border-strong)] rounded-lg pl-9 pr-4 py-1.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
 
               {/* View Selector Buttons */}
-              <div className="flex items-center bg-slate-100/80 p-1 rounded-lg border border-slate-200">
+              <div className="flex items-center bg-[var(--bg-hover)]/80 p-1 rounded-lg border border-[var(--border-strong)]">
                 <button
                   onClick={() => setViewMode("list")}
                   className={`p-1.5 rounded-md flex items-center gap-1.5 text-xs font-semibold transition-all ${viewMode === "list"
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                    ? "bg-[var(--bg-card)] text-indigo-600 shadow-sm"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                     }`}
                   title="List View"
                 >
@@ -396,8 +436,8 @@ export default function SentinelDashboard() {
                 <button
                   onClick={() => setViewMode("grid")}
                   className={`p-1.5 rounded-md flex items-center gap-1.5 text-xs font-semibold transition-all ${viewMode === "grid"
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                    ? "bg-[var(--bg-card)] text-indigo-600 shadow-sm"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                     }`}
                   title="Grid View"
                 >
@@ -407,8 +447,8 @@ export default function SentinelDashboard() {
                 <button
                   onClick={() => setViewMode("kanban")}
                   className={`p-1.5 rounded-md flex items-center gap-1.5 text-xs font-semibold transition-all ${viewMode === "kanban"
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                    ? "bg-[var(--bg-card)] text-indigo-600 shadow-sm"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                     }`}
                   title="Kanban View"
                 >
@@ -423,13 +463,13 @@ export default function SentinelDashboard() {
           {viewMode === "list" && (
             <div className="overflow-x-auto w-full">
               {filteredVisitors.length === 0 ? (
-                <div className="text-center py-16 text-slate-500">
+                <div className="text-center py-16 text-[var(--text-muted)]">
                   <UserCheck className="mx-auto opacity-30 mb-2" size={32} />
                   <p className="text-sm font-medium">No check-ins found matching query.</p>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50/80 text-slate-500 uppercase text-[11px] font-bold tracking-wider border-b border-slate-100">
+                  <thead className="bg-[var(--bg-hover)]/80 text-[var(--text-muted)] uppercase text-[11px] font-bold tracking-wider border-b border-[var(--border)]">
                     <tr>
                       <th className="px-6 py-4">Visitor</th>
                       <th className="px-6 py-4">Purpose</th>
@@ -439,12 +479,12 @@ export default function SentinelDashboard() {
                       <th className="px-6 py-4 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-[var(--border)]">
                     {filteredVisitors.map((visitor) => (
-                      <tr key={visitor.visitor_id} className="hover:bg-slate-50/50 transition-colors group">
+                      <tr key={visitor.visitor_id} className="hover:bg-[var(--bg-hover)]/50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 flex-shrink-0 relative">
+                            <div className="w-10 h-10 rounded-xl bg-[var(--bg-hover)] overflow-hidden border border-[var(--border-strong)] flex-shrink-0 relative">
                               {visitor.photo_image ? (
                                 <>
                                   <img src={visitor.photo_image} alt="" className="w-full h-full object-cover" />
@@ -453,14 +493,14 @@ export default function SentinelDashboard() {
                                   </div>
                                 </>
                               ) : (
-                                <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold bg-slate-50">
+                                <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] font-bold bg-[var(--bg-hover)]">
                                   {visitor.full_name.charAt(0).toUpperCase()}
                                 </div>
                               )}
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-800">{visitor.full_name}</div>
-                              <div className="text-xs text-slate-500">{visitor.company_name || "Personal Visit"}</div>
+                              <div className="font-semibold text-[var(--text-primary)]">{visitor.full_name}</div>
+                              <div className="text-xs text-[var(--text-muted)]">{visitor.company_name || "Personal Visit"}</div>
                             </div>
                           </div>
                         </td>
@@ -468,18 +508,18 @@ export default function SentinelDashboard() {
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${visitor.purpose_of_visit === 'Meeting' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
                             visitor.purpose_of_visit === 'Interview' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
                               visitor.purpose_of_visit === 'Delivery' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                                'bg-slate-50 text-slate-600 border border-slate-100'
+                                'bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-[var(--border)]'
                             }`}>
                             {visitor.purpose_of_visit}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-600 text-xs">
+                        <td className="px-6 py-4 text-[var(--text-secondary)] text-xs">
                           <div>{visitor.phone}</div>
                           {visitor.id_proof_number && (
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {visitor.id_proof_number}</div>
+                            <div className="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">ID: {visitor.id_proof_number}</div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                        <td className="px-6 py-4 text-[var(--text-muted)] font-mono text-xs">
                           {new Date(visitor.check_in_time).toLocaleString("en-IN", {
                             day: "2-digit",
                             month: "short",
@@ -494,7 +534,7 @@ export default function SentinelDashboard() {
                               Active Inside
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full text-xs">
+                            <span className="inline-flex items-center gap-1 text-[var(--text-muted)] bg-[var(--bg-hover)] border border-[var(--border)] px-2 py-0.5 rounded-full text-xs">
                               Out: {new Date(visitor.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           )}
@@ -509,7 +549,7 @@ export default function SentinelDashboard() {
                               Check Out
                             </button>
                           ) : (
-                            <span className="text-xs text-slate-400 font-medium pr-2">Completed</span>
+                            <span className="text-xs text-[var(--text-muted)] font-medium pr-2">Completed</span>
                           )}
                         </td>
                       </tr>
@@ -524,7 +564,7 @@ export default function SentinelDashboard() {
           {viewMode === "grid" && (
             <div className="p-6">
               {filteredVisitors.length === 0 ? (
-                <div className="text-center py-16 text-slate-500">
+                <div className="text-center py-16 text-[var(--text-muted)]">
                   <UserCheck className="mx-auto opacity-30 mb-2" size={32} />
                   <p className="text-sm font-medium">No check-ins found matching query.</p>
                 </div>
@@ -533,10 +573,10 @@ export default function SentinelDashboard() {
                   {filteredVisitors.map((visitor) => (
                     <div
                       key={visitor.visitor_id}
-                      className="glass border border-slate-200/60 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
+                      className="glass border border-[var(--border)]/60 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
                     >
                       {/* Photo Header */}
-                      <div className="aspect-video relative bg-slate-100 overflow-hidden border-b border-slate-100 flex-shrink-0">
+                      <div className="aspect-video relative bg-[var(--bg-hover)] overflow-hidden border-b border-[var(--border)] flex-shrink-0">
                         {visitor.photo_image ? (
                           <>
                             <img src={visitor.photo_image} alt="" className="w-full h-full object-cover" />
@@ -548,7 +588,7 @@ export default function SentinelDashboard() {
                             )}
                           </>
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold bg-slate-50 text-2xl">
+                          <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] font-bold bg-[var(--bg-hover)] text-2xl">
                             {visitor.full_name.charAt(0).toUpperCase()}
                           </div>
                         )}
@@ -579,20 +619,20 @@ export default function SentinelDashboard() {
                         </div>
                       </div>
 
-                      {/* Card Content */}
+                        {/* Card Content */}
                       <div className="p-4 flex-1 flex flex-col justify-between gap-4">
                         <div>
-                          <h4 className="font-bold text-slate-800 text-sm leading-snug line-clamp-1">{visitor.full_name}</h4>
-                          <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium line-clamp-1">{visitor.company_name || "Personal Visit"}</p>
+                          <h4 className="font-bold text-[var(--text-primary)] text-sm leading-snug line-clamp-1">{visitor.full_name}</h4>
+                          <p className="text-[11.5px] text-[var(--text-muted)] mt-0.5 font-medium line-clamp-1">{visitor.company_name || "Personal Visit"}</p>
 
-                          <div className="mt-3 space-y-1.5 text-xs text-slate-500">
+                          <div className="mt-3 space-y-1.5 text-xs text-[var(--text-muted)]">
                             <div className="flex items-center gap-2">
-                              <Clock size={12} className="text-slate-400 flex-shrink-0" />
+                              <Clock size={12} className="text-[var(--text-muted)] flex-shrink-0" />
                               <span className="font-mono">In: {new Date(visitor.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                             {visitor.check_out_time && (
                               <div className="flex items-center gap-2">
-                                <LogOut size={12} className="text-slate-400 flex-shrink-0" />
+                                <LogOut size={12} className="text-[var(--text-muted)] flex-shrink-0" />
                                 <span className="font-mono">Out: {new Date(visitor.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
                             )}
@@ -600,8 +640,8 @@ export default function SentinelDashboard() {
                         </div>
 
                         {/* Action buttons */}
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                          <span className="text-[10px] text-slate-400 font-mono">ID: {visitor.id_proof_number || "None"}</span>
+                        <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between">
+                          <span className="text-[10px] text-[var(--text-muted)] font-mono">ID: {visitor.id_proof_number || "None"}</span>
                           {!visitor.check_out_time ? (
                             <button
                               onClick={() => handleCheckOut(visitor.visitor_id)}
@@ -630,11 +670,11 @@ export default function SentinelDashboard() {
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[400px]">
 
               {/* Column 1: Active Presence Column */}
-              <div className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-4 flex flex-col">
-                <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-200">
+              <div className="bg-[var(--bg-hover)]/50 border border-[var(--border)]/50 rounded-2xl p-4 flex flex-col">
+                <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--border-strong)]">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
-                    <h4 className="font-bold text-slate-800 text-sm">Active Inside</h4>
+                    <h4 className="font-bold text-[var(--text-primary)] text-sm">Active Inside</h4>
                   </div>
                   <span className="text-[10px] bg-emerald-100/80 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-md font-bold">
                     {kanbanColumns.active.length} Guests
@@ -643,7 +683,7 @@ export default function SentinelDashboard() {
 
                 <div className="space-y-3 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar pr-1">
                   {kanbanColumns.active.length === 0 ? (
-                    <div className="text-center py-16 text-slate-400 text-xs">
+                    <div className="text-center py-16 text-[var(--text-muted)] text-xs">
                       <UserCheck className="mx-auto opacity-20 mb-2" size={24} />
                       <p>No active visitors in the building.</p>
                     </div>
@@ -651,29 +691,29 @@ export default function SentinelDashboard() {
                     kanbanColumns.active.map((visitor) => (
                       <div
                         key={visitor.visitor_id}
-                        className="glass border border-slate-200/80 rounded-xl p-3.5 shadow-sm hover:shadow-md transition-shadow relative"
+                        className="glass border border-[var(--border-strong)]/80 rounded-xl p-3.5 shadow-sm hover:shadow-md transition-shadow relative"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex-shrink-0">
+                          <div className="w-12 h-12 rounded-lg bg-[var(--bg-hover)] overflow-hidden border border-[var(--border-strong)] flex-shrink-0">
                             {visitor.photo_image ? (
                               <img src={visitor.photo_image} alt="" className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold bg-slate-50">
+                              <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] font-bold bg-[var(--bg-hover)]">
                                 {visitor.full_name.charAt(0).toUpperCase()}
                               </div>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex justify-between items-start gap-2">
-                              <h5 className="font-bold text-slate-800 text-xs leading-snug line-clamp-1">{visitor.full_name}</h5>
+                              <h5 className="font-bold text-[var(--text-primary)] text-xs leading-snug line-clamp-1">{visitor.full_name}</h5>
                               <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100 text-[9px] font-bold whitespace-nowrap">
                                 {visitor.purpose_of_visit}
                               </span>
                             </div>
-                            <p className="text-[10.5px] text-slate-500 mt-0.5 leading-none line-clamp-1">{visitor.company_name || "Personal"}</p>
+                            <p className="text-[10.5px] text-[var(--text-muted)] mt-0.5 leading-none line-clamp-1">{visitor.company_name || "Personal"}</p>
 
                             <div className="mt-2.5 flex items-center justify-between">
-                              <span className="text-[10px] text-slate-400 font-mono">In: {new Date(visitor.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className="text-[10px] text-[var(--text-muted)] font-mono">In: {new Date(visitor.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               <button
                                 onClick={() => handleCheckOut(visitor.visitor_id)}
                                 className="text-[10px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-1 rounded-md font-bold transition-all shadow-sm flex items-center gap-0.5"
@@ -691,20 +731,20 @@ export default function SentinelDashboard() {
               </div>
 
               {/* Column 2: Completed Visits Column */}
-              <div className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-4 flex flex-col">
-                <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-200">
-                  <div className="flex items-center gap-2 text-slate-500">
+              <div className="bg-[var(--bg-hover)]/50 border border-[var(--border)]/50 rounded-2xl p-4 flex flex-col">
+                <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--border-strong)]">
+                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
                     <CheckCircle size={15} />
-                    <h4 className="font-bold text-slate-800 text-sm">Completed Visits</h4>
+                    <h4 className="font-bold text-[var(--text-primary)] text-sm">Completed Visits</h4>
                   </div>
-                  <span className="text-[10px] bg-slate-200/80 border border-slate-300 text-slate-600 px-2 py-0.5 rounded-md font-bold">
+                  <span className="text-[10px] bg-[var(--bg-hover)]/80 border border-[var(--border-strong)] text-[var(--text-secondary)] px-2 py-0.5 rounded-md font-bold">
                     {kanbanColumns.completed.length} History
                   </span>
                 </div>
 
                 <div className="space-y-3 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar pr-1">
                   {kanbanColumns.completed.length === 0 ? (
-                    <div className="text-center py-16 text-slate-400 text-xs">
+                    <div className="text-center py-16 text-[var(--text-muted)] text-xs">
                       <LogOut className="mx-auto opacity-20 mb-2" size={24} />
                       <p>No completed visits logged today.</p>
                     </div>
@@ -712,28 +752,28 @@ export default function SentinelDashboard() {
                     kanbanColumns.completed.map((visitor) => (
                       <div
                         key={visitor.visitor_id}
-                        className="glass border border-slate-200/40 rounded-xl p-3.5 shadow-sm opacity-85"
+                        className="glass border border-[var(--border-strong)]/40 rounded-xl p-3.5 shadow-sm opacity-85"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden border border-slate-200/60 flex-shrink-0 filter grayscale-[40%]">
+                          <div className="w-12 h-12 rounded-lg bg-[var(--bg-hover)] overflow-hidden border border-[var(--border)]/60 flex-shrink-0 filter grayscale-[40%]">
                             {visitor.photo_image ? (
                               <img src={visitor.photo_image} alt="" className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold bg-slate-50">
+                              <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)] font-bold bg-[var(--bg-hover)]">
                                 {visitor.full_name.charAt(0).toUpperCase()}
                               </div>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex justify-between items-start gap-2">
-                              <h5 className="font-semibold text-slate-700 text-xs leading-snug line-clamp-1">{visitor.full_name}</h5>
-                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-semibold whitespace-nowrap">
+                              <h5 className="font-semibold text-[var(--text-secondary)] text-xs leading-snug line-clamp-1">{visitor.full_name}</h5>
+                              <span className="px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-[var(--border-strong)] text-[9px] font-semibold whitespace-nowrap">
                                 {visitor.purpose_of_visit}
                               </span>
                             </div>
-                            <p className="text-[10.5px] text-slate-400 mt-0.5 leading-none line-clamp-1">{visitor.company_name || "Personal"}</p>
+                            <p className="text-[10.5px] text-[var(--text-muted)] mt-0.5 leading-none line-clamp-1">{visitor.company_name || "Personal"}</p>
 
-                            <div className="mt-2.5 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                            <div className="mt-2.5 flex items-center justify-between text-[10px] text-[var(--text-muted)] font-mono">
                               <span>In: {new Date(visitor.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               <span className="text-emerald-600 font-bold flex items-center gap-0.5 bg-emerald-50 px-1 py-0.5 rounded">
                                 <CheckCircle size={10} /> Out
@@ -821,11 +861,11 @@ function DetailDrawer({ isOpen, onClose, type, data }: any) {
       return (
         <div className="space-y-3">
           {data.faces.map((face: RegisteredFace) => (
-            <div key={face.id} className="flex items-center gap-4 p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100/70 transition-colors">
-              <img src={face.photo_url} alt="" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
+            <div key={face.id} className="flex items-center gap-4 p-3 rounded-lg bg-[var(--bg-hover)] border border-[var(--border)] hover:bg-[var(--bg-hover)]/70 transition-colors">
+              <img src={face.photo_url} alt="" className="w-12 h-12 rounded-full object-cover border border-[var(--border-strong)]" />
               <div>
-                <div className="font-semibold text-slate-800">{face.name}</div>
-                <div className="text-xs text-slate-500">{face.department}</div>
+                <div className="font-semibold text-[var(--text-primary)]">{face.name}</div>
+                <div className="text-xs text-[var(--text-muted)]">{face.department}</div>
               </div>
               <div className="ml-auto text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 font-bold">Verified</div>
             </div>
@@ -835,19 +875,19 @@ function DetailDrawer({ isOpen, onClose, type, data }: any) {
     }
     if (type === 'kpi-active') {
       const active = data.visitors.filter((v: Visitor) => !v.check_out_time);
-      if (active.length === 0) return <div className="text-slate-500 text-center py-10">No active visitors currently.</div>;
+      if (active.length === 0) return <div className="text-[var(--text-muted)] text-center py-10">No active visitors currently.</div>;
       return (
         <div className="space-y-3">
           {active.map((v: Visitor) => (
-            <div key={v.visitor_id} className="p-4 rounded-lg bg-slate-50 border border-slate-100">
+            <div key={v.visitor_id} className="p-4 rounded-lg bg-[var(--bg-hover)] border border-[var(--border)]">
               <div className="flex justify-between items-start">
                 <div className="flex gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden border border-slate-300 flex-shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--bg-hover)] overflow-hidden border border-[var(--border-strong)] flex-shrink-0">
                     {v.photo_image && <img src={v.photo_image} className="w-full h-full object-cover" />}
                   </div>
                   <div>
-                    <div className="text-slate-800 font-semibold">{v.full_name}</div>
-                    <div className="text-xs text-slate-500 font-medium">{v.company_name || "Personal"}</div>
+                    <div className="text-[var(--text-primary)] font-semibold">{v.full_name}</div>
+                    <div className="text-xs text-[var(--text-muted)] font-medium">{v.company_name || "Personal"}</div>
                   </div>
                 </div>
                 <span className="text-xs text-emerald-600 font-bold font-mono">IN: {new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -861,23 +901,23 @@ function DetailDrawer({ isOpen, onClose, type, data }: any) {
       return (
         <div className="space-y-2">
           {data.logs.map((log: FaceLog) => (
-            <div key={log.id} className="flex items-center justify-between p-3 rounded bg-slate-50 border border-slate-100 border-l-2 border-l-indigo-500">
+            <div key={log.id} className="flex items-center justify-between p-3 rounded bg-[var(--bg-hover)] border border-[var(--border)] border-l-2 border-l-indigo-500">
               <div>
-                <div className="text-sm text-slate-800 font-semibold">{log.person_name}</div>
-                <div className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</div>
+                <div className="text-sm text-[var(--text-primary)] font-semibold">{log.person_name}</div>
+                <div className="text-xs text-[var(--text-muted)]">{new Date(log.timestamp).toLocaleString()}</div>
               </div>
               <div className="text-right">
                 <div className={`text-xs font-extrabold ${log.confidence > 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
                   {log.confidence.toFixed(1)}% Match
                 </div>
-                <div className="text-[10px] text-slate-500 uppercase font-bold mt-0.5">{log.status}</div>
+                <div className="text-[10px] text-[var(--text-muted)] uppercase font-bold mt-0.5">{log.status}</div>
               </div>
             </div>
           ))}
         </div>
       );
     }
-    return <div className="text-slate-500">Data visualization not available for this view.</div>;
+    return <div className="text-[var(--text-muted)]">Data visualization not available for this view.</div>;
   };
 
   return (
@@ -889,13 +929,13 @@ function DetailDrawer({ isOpen, onClose, type, data }: any) {
       />
 
       {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 w-full md:w-[480px] bg-white border-l border-slate-200 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+      <div className="fixed inset-y-0 right-0 w-full md:w-[480px] bg-[var(--bg-panel)] border-l border-[var(--border-strong)] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
+        <div className="p-6 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-hover)]">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">{getTitle()}</h2>
-            <p className="text-xs text-slate-500 mt-1">Real-time data stream</p>
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">{getTitle()}</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-1">Real-time data stream</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-800 transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-[var(--bg-hover)] rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -904,7 +944,7 @@ function DetailDrawer({ isOpen, onClose, type, data }: any) {
           {renderContent()}
         </div>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50 text-center text-xs text-slate-500">
+        <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-hover)] text-center text-xs text-[var(--text-muted)]">
           End of records
         </div>
       </div>
@@ -928,6 +968,20 @@ function generateMockChartData() {
   ];
 }
 
+function timeAgo(dateStr: string): string {
+  const now = new Date();
+  const then = new Date(dateStr);
+  const diffMs = now.getTime() - then.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Styles                                                             */
 /* ------------------------------------------------------------------ */
@@ -940,11 +994,12 @@ function generateMockChartData() {
 const styleTag = (
   <style>{`
     .glass-panel {
-      background: rgba(255, 255, 255, 0.5);
+      background: var(--bg-card);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
     }
     
     /* Custom Scrollbar for the drawer */
@@ -952,14 +1007,14 @@ const styleTag = (
       width: 6px;
     }
     .custom-scrollbar::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.02);
+      background: var(--bg-input);
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.1);
-      border-radius: 10px;
+      background: var(--border-strong);
+      border-radius: 99px;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: rgba(0, 0, 0, 0.2);
+      background: var(--text-muted);
     }
   `}</style>
 );

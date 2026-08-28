@@ -36,24 +36,24 @@ type Purpose = "Meeting" | "Interview" | "Delivery" | "Other";
 
 const PURPOSES: Purpose[] = ["Meeting", "Interview", "Delivery", "Other"];
 
-// Light Theme Colors
+// Light Theme Colors — now driven by CSS custom properties
 const T = {
-  bg: "#f8f9fb",
-  bgPanel: "#ffffff",
-  bgField: "#f9fafb",
-  border: "#e5e7eb",
-  borderStrong: "#d1d5db",
-  accent: "#6366f1",
-  accentGlow: "rgba(99, 102, 241, 0.15)",
-  ok: "#10b981",
-  text: "#111827",
-  textMuted: "#4b5563",
-  textFaint: "#9ca3af",
+  bg: "var(--bg-deep)",
+  bgPanel: "var(--bg-card)",
+  bgField: "var(--bg-input)",
+  border: "var(--border-light)",
+  borderStrong: "var(--border-strong)",
+  accent: "var(--accent-primary)",
+  accentGlow: "var(--accent-glow)",
+  ok: "var(--status-ok)",
+  text: "var(--text-primary)",
+  textMuted: "var(--text-muted)",
+  textFaint: "var(--text-faint)",
 } as const;
 
-// HLS host — MediaMTX serves HLS on port 8888
+// HLS host — MediaMTX serves HLS on port 8892
 const HLS_BASE = typeof window !== "undefined"
-  ? `${window.location.protocol}//${window.location.hostname}:8888`
+  ? `${window.location.protocol}//${window.location.hostname}:8892`
   : "";
 
 export default function PublicCheckInPage() {
@@ -79,22 +79,17 @@ export default function PublicCheckInPage() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
 
-  // Step 3: Photo capture via RTSP cameras
+  // Step 3: Photo capture via Mobile / Laptop Webcam
   const [photo, setPhoto] = useState<string | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
 
-  // Camera selector
-  const [cameras, setCameras] = useState<CameraItem[]>([]);
-  const [selectedCamera, setSelectedCamera] = useState<CameraItem | null>(null);
-  const [cameraMenuOpen, setCameraMenuOpen] = useState(false);
-  const [camerasLoading, setCamerasLoading] = useState(false);
-
-  // HLS live stream
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<any>(null);
-  const [streamActive, setStreamActive] = useState(false);
-  const [streamError, setStreamError] = useState("");
-  const [streamLoading, setStreamLoading] = useState(false);
+  // Device Camera (Webcam / Mobile Camera)
+  const webcamVideoRef = useRef<HTMLVideoElement>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+  const [webcamActive, setWebcamActive] = useState(false);
+  const [webcamLoading, setWebcamLoading] = useState(false);
+  const [webcamError, setWebcamError] = useState("");
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   // Capture & crop
   const [capturedFrame, setCapturedFrame] = useState<string | null>(null);
@@ -175,105 +170,82 @@ export default function PublicCheckInPage() {
     }
   }, [purpose, latitude, locationLoading, locationError, locationAddress]);
 
-  // Load cameras when on step 3
-  useEffect(() => {
-    if (step === 3) {
-      loadCameras();
+  const stopWebcam = useCallback(() => {
+    if (webcamStreamRef.current) {
+      webcamStreamRef.current.getTracks().forEach((track) => track.stop());
+      webcamStreamRef.current = null;
     }
-    return () => stopHlsStream();
-  }, [step]);
-
-  async function loadCameras() {
-    setCamerasLoading(true);
-    try {
-      const res = await fetch("/api/cameras");
-      if (res.ok) {
-        const data = await res.json();
-        setCameras(data || []);
-        if (data && data.length > 0) setSelectedCamera(data[0]);
-      }
-    } catch (err) {
-      console.error("Failed to load cameras:", err);
-    } finally {
-      setCamerasLoading(false);
+    if (webcamVideoRef.current) {
+      webcamVideoRef.current.srcObject = null;
     }
-  }
+    setWebcamActive(false);
+    setWebcamLoading(false);
+  }, []);
 
-  async function startHlsStream(cam: CameraItem) {
-    stopHlsStream();
-    setStreamLoading(true);
-    setStreamError("");
-    setStreamActive(false);
-    setCapturedFrame(null);
-    setCropMode(false);
+  const startWebcam = useCallback(async (facing: "user" | "environment" = facingMode) => {
+    stopWebcam();
+    setWebcamLoading(true);
+    setWebcamError("");
+    setWebcamActive(false);
 
-    const hlsUrl = `${HLS_BASE}/${cam.id}/index.m3u8`;
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setWebcamError("Camera access is not supported by your browser.");
+      setWebcamLoading(false);
+      return;
+    }
 
     try {
-      // Dynamically import hls.js to avoid SSR issues
-      const Hls = (await import("hls.js" as any)).default;
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          lowLatencyMode: true,
-          maxBufferLength: 4,
-          maxMaxBufferLength: 8,
-          liveSyncDurationCount: 2,
-          liveMaxLatencyDurationCount: 4,
-        });
-        hlsRef.current = hls;
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(videoRef.current!);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          videoRef.current!.play().catch(() => {});
-          setStreamActive(true);
-          setStreamLoading(false);
-        });
-        hls.on(Hls.Events.ERROR, (_: any, data: any) => {
-          if (data.fatal) {
-            setStreamError("Stream unavailable. Check camera is online.");
-            setStreamLoading(false);
-          }
-        });
-      } else if (videoRef.current!.canPlayType("application/vnd.apple.mpegurl")) {
-        // Safari native HLS
-        videoRef.current!.src = hlsUrl;
-        await videoRef.current!.play();
-        setStreamActive(true);
-        setStreamLoading(false);
-      } else {
-        setStreamError("HLS not supported in this browser.");
-        setStreamLoading(false);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: facing,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+      webcamStreamRef.current = stream;
+      if (webcamVideoRef.current) {
+        webcamVideoRef.current.srcObject = stream;
+        await webcamVideoRef.current.play().catch(() => {});
       }
-    } catch (err) {
-      console.error("HLS init error:", err);
-      setStreamError("Failed to start stream.");
-      setStreamLoading(false);
+      setWebcamActive(true);
+      setWebcamLoading(false);
+    } catch (err: any) {
+      console.error("Webcam error:", err);
+      let msg = "Could not access mobile/laptop camera.";
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        msg = "Camera permission denied. Please allow camera access in your browser settings.";
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        msg = "No camera device found on your phone/laptop.";
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        msg = "Camera is currently in use by another application.";
+      }
+      setWebcamError(msg);
+      setWebcamLoading(false);
     }
-  }
+  }, [facingMode, stopWebcam]);
 
-  function stopHlsStream() {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.src = "";
-    }
-    setStreamActive(false);
-    setStreamLoading(false);
-  }
-
-  // When user selects a camera, auto-start stream
+  // Start device camera when entering Step 3 and stop when leaving Step 3
   useEffect(() => {
-    if (selectedCamera && step === 3 && !photo) {
-      startHlsStream(selectedCamera);
+    if (step === 3 && !photo) {
+      startWebcam();
+    } else {
+      stopWebcam();
     }
-  }, [selectedCamera]);
+    return () => stopWebcam();
+  }, [step, photo, startWebcam, stopWebcam]);
+
+  const toggleFacingMode = () => {
+    const nextMode = facingMode === "user" ? "environment" : "user";
+    setFacingMode(nextMode);
+    if (step === 3 && !photo) {
+      startWebcam(nextMode);
+    }
+  };
 
   function handleCaptureFrame() {
-    if (!videoRef.current || !streamActive) return;
-    const video = videoRef.current;
+    if (!webcamVideoRef.current || !webcamActive) return;
+    const video = webcamVideoRef.current;
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
@@ -282,7 +254,7 @@ export default function PublicCheckInPage() {
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setCapturedFrame(dataUrl);
-    stopHlsStream();
+    stopWebcam();
     // Load image for crop
     const img = new Image();
     img.onload = () => {
@@ -384,13 +356,13 @@ export default function PublicCheckInPage() {
     setPhoto(null);
     setCapturedFrame(null);
     setCropMode(false);
-    if (selectedCamera) startHlsStream(selectedCamera);
+    startWebcam();
   }
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    stopHlsStream();
+    stopWebcam();
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhoto(reader.result as string);
@@ -426,7 +398,7 @@ export default function PublicCheckInPage() {
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#111827";
+    ctx.strokeStyle = document.documentElement.getAttribute("data-theme") === "light" ? "#1e293b" : "#f1f5f9";
   }
 
   function draw(e: any) {
@@ -529,12 +501,13 @@ export default function PublicCheckInPage() {
         alignItems: "center",
         justifyContent: "center",
         padding: "24px 16px",
-        background: "#f8f9fb",
+        background: "var(--bg-deep)",
         fontFamily: "'Inter', sans-serif",
         color: T.text,
       }}
     >
       <div
+        className="snt-kiosk"
         style={{
           width: "100%",
           maxWidth: 960,
@@ -731,14 +704,14 @@ export default function PublicCheckInPage() {
                       <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: T.textMuted, letterSpacing: "0.05em", marginBottom: 8 }}>
                         Purpose of Visit *
                       </label>
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {PURPOSES.map((p) => (
                           <button
                             key={p}
                             type="button"
                             onClick={() => setPurpose(p)}
                             style={{
-                              flex: 1,
+                              flex: "1 1 120px",
                               background: purpose === p ? T.accent : T.bgField,
                               border: `1px solid ${purpose === p ? T.accent : T.borderStrong}`,
                               color: purpose === p ? "#fff" : T.text,
@@ -788,7 +761,7 @@ export default function PublicCheckInPage() {
                           marginTop: 10,
                           border: `1px solid ${T.border}`,
                           borderRadius: 12,
-                          background: "#fbfbfe",
+                          background: "var(--bg-panel)",
                         }}
                       >
                         {filteredHosts.length === 0 ? (
@@ -867,77 +840,37 @@ export default function PublicCheckInPage() {
 
                     {/* Photo section */}
                     <div>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.textMuted, letterSpacing: "0.05em", marginBottom: 8 }}>
-                        Visitor Photo *
-                      </label>
-
-                      {/* Camera selector row */}
-                      {!photo && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                          <div style={{ position: "relative", flex: 1 }}>
-                            <button
-                              type="button"
-                              onClick={() => setCameraMenuOpen(o => !o)}
-                              style={{
-                                width: "100%", display: "flex", alignItems: "center", gap: 8,
-                                background: T.bgField, border: `1px solid ${T.border}`, borderRadius: 10,
-                                padding: "9px 12px", fontSize: 12.5, color: T.text, cursor: "pointer",
-                              }}
-                            >
-                              <Video size={14} style={{ color: T.accent, flexShrink: 0 }} />
-                              <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {camerasLoading ? "Loading cameras..." : selectedCamera ? `${selectedCamera.name}${selectedCamera.place ? " — " + selectedCamera.place : ""}` : "Select a camera"}
-                              </span>
-                              <ChevronDown size={14} style={{ color: T.textFaint, flexShrink: 0 }} />
-                            </button>
-                            {cameraMenuOpen && cameras.length > 0 && (
-                              <div style={{
-                                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
-                                background: T.bgPanel, border: `1px solid ${T.border}`, borderRadius: 10,
-                                boxShadow: "0 8px 24px rgba(0,0,0,0.12)", marginTop: 4, maxHeight: 180, overflowY: "auto",
-                              }}>
-                                {cameras.map(cam => (
-                                  <button
-                                    key={cam.id}
-                                    type="button"
-                                    onClick={() => { setSelectedCamera(cam); setCameraMenuOpen(false); }}
-                                    style={{
-                                      width: "100%", display: "flex", alignItems: "center", gap: 8,
-                                      padding: "9px 12px", background: selectedCamera?.id === cam.id ? T.accentGlow : "transparent",
-                                      border: "none", borderBottom: `1px solid ${T.border}`, cursor: "pointer",
-                                      fontSize: 12.5, color: T.text, textAlign: "left",
-                                    }}
-                                  >
-                                    <Video size={12} style={{ color: T.accent, flexShrink: 0 }} />
-                                    <div style={{ flex: 1 }}>
-                                      <div style={{ fontWeight: 600 }}>{cam.name}</div>
-                                      {cam.place && <div style={{ fontSize: 10.5, color: T.textFaint }}>{cam.place}</div>}
-                                    </div>
-                                    {selectedCamera?.id === cam.id && <Check size={12} style={{ color: T.accent }} />}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {selectedCamera && (
-                            <button
-                              type="button"
-                              onClick={() => selectedCamera && startHlsStream(selectedCamera)}
-                              title="Retry stream"
-                              style={{
-                                padding: "9px 10px", background: T.bgField, border: `1px solid ${T.border}`,
-                                borderRadius: 10, cursor: "pointer", color: T.accent, display: "flex", alignItems: "center",
-                              }}
-                            >
-                              <RefreshCw size={14} />
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <label style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.textMuted, letterSpacing: "0.05em" }}>
+                          Visitor Photo (Mobile / Laptop Camera) *
+                        </label>
+                        {!photo && webcamActive && (
+                          <button
+                            type="button"
+                            onClick={toggleFacingMode}
+                            style={{
+                              background: T.bgField,
+                              border: `1px solid ${T.border}`,
+                              borderRadius: 8,
+                              padding: "4px 10px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: T.accent,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <RefreshCw size={12} />
+                            {facingMode === "user" ? "Switch to Back Camera" : "Switch to Front Camera"}
+                          </button>
+                        )}
+                      </div>
 
                       {/* Camera view area */}
                       <div style={{
-                        aspectRatio: "16/9", background: "#0a0a0f", borderRadius: 12, overflow: "hidden",
+                        aspectRatio: "16/9", background: "var(--bg-deep)", borderRadius: 12, overflow: "hidden",
                         border: `1px solid ${T.border}`, position: "relative",
                         display: "flex", alignItems: "center", justifyContent: "center",
                       }}>
@@ -1030,60 +963,56 @@ export default function PublicCheckInPage() {
                           </div>
                         )}
 
-                        {/* HLS live stream */}
+                        {/* Live Device Camera Stream */}
                         {!photo && !cropMode && (
                           <div style={{ width: "100%", height: "100%", position: "relative" }}>
                             <video
-                              ref={videoRef}
+                              ref={webcamVideoRef}
                               autoPlay
                               playsInline
                               muted
-                              style={{ width: "100%", height: "100%", objectFit: "cover", display: streamActive ? "block" : "none" }}
+                              style={{
+                                width: "100%", height: "100%", objectFit: "cover",
+                                display: webcamActive ? "block" : "none",
+                                transform: facingMode === "user" ? "scaleX(-1)" : "none",
+                              }}
                             />
+
                             {/* Loading overlay */}
-                            {streamLoading && (
+                            {webcamLoading && (
                               <div style={{
                                 position: "absolute", inset: 0, display: "flex", flexDirection: "column",
                                 alignItems: "center", justifyContent: "center", gap: 10, color: "#fff",
                               }}>
                                 <Loader2 size={28} style={{ animation: "spin 1s linear infinite", opacity: 0.7 }} />
-                                <span style={{ fontSize: 12, opacity: 0.6 }}>Connecting to camera...</span>
+                                <span style={{ fontSize: 12, opacity: 0.7 }}>Starting mobile/laptop camera...</span>
                               </div>
                             )}
+
                             {/* Error overlay */}
-                            {!streamLoading && streamError && (
+                            {!webcamLoading && webcamError && (
                               <div style={{
                                 position: "absolute", inset: 0, display: "flex", flexDirection: "column",
                                 alignItems: "center", justifyContent: "center", gap: 12, color: "#fff", padding: 20,
                               }}>
-                                <Camera size={28} style={{ opacity: 0.3 }} />
-                                <span style={{ fontSize: 12, opacity: 0.6, textAlign: "center" }}>{streamError}</span>
-                                {selectedCamera && (
-                                  <button
-                                    type="button"
-                                    onClick={() => startHlsStream(selectedCamera)}
-                                    style={{
-                                      background: T.accent, color: "#fff", border: "none",
-                                      borderRadius: 8, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                                    }}
-                                  >
-                                    Retry
-                                  </button>
-                                )}
+                                <Camera size={32} style={{ opacity: 0.4 }} />
+                                <span style={{ fontSize: 12, opacity: 0.8, textAlign: "center", maxWidth: 320 }}>{webcamError}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => startWebcam()}
+                                  style={{
+                                    background: T.accent, color: "#fff", border: "none",
+                                    borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                    display: "flex", alignItems: "center", gap: 6,
+                                  }}
+                                >
+                                  <RefreshCw size={13} /> Allow / Retry Camera
+                                </button>
                               </div>
                             )}
-                            {/* No camera selected */}
-                            {!streamLoading && !streamError && !streamActive && !selectedCamera && (
-                              <div style={{
-                                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                                alignItems: "center", justifyContent: "center", gap: 8, color: "#fff",
-                              }}>
-                                <Video size={28} style={{ opacity: 0.3 }} />
-                                <span style={{ fontSize: 12, opacity: 0.5 }}>Select a camera above to start live view</span>
-                              </div>
-                            )}
-                            {/* Capture button */}
-                            {streamActive && (
+
+                            {/* Live indicator and Capture button */}
+                            {webcamActive && (
                               <>
                                 <div style={{
                                   position: "absolute", top: 8, left: 8,
@@ -1092,7 +1021,7 @@ export default function PublicCheckInPage() {
                                   letterSpacing: "0.1em", display: "flex", alignItems: "center", gap: 4,
                                 }}>
                                   <span style={{ width: 6, height: 6, background: "#fff", borderRadius: "50%", display: "inline-block" }} />
-                                  LIVE
+                                  DEVICE CAMERA LIVE
                                 </div>
                                 <button
                                   type="button"
@@ -1100,12 +1029,12 @@ export default function PublicCheckInPage() {
                                   style={{
                                     position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
                                     background: "rgba(255,255,255,0.95)", border: "none", borderRadius: 10,
-                                    padding: "8px 20px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                                    padding: "9px 22px", fontSize: 13, fontWeight: 700, cursor: "pointer",
                                     color: T.accent, display: "flex", alignItems: "center", gap: 6,
-                                    boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
                                   }}
                                 >
-                                  <Camera size={14} /> Capture & Crop
+                                  <Camera size={15} /> Capture & Crop
                                 </button>
                               </>
                             )}
@@ -1115,25 +1044,20 @@ export default function PublicCheckInPage() {
 
                       {/* File upload alternative */}
                       {!photo && !cropMode && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                          <div style={{ flex: 1, height: 1, background: T.border }} />
-                          <span style={{ fontSize: 11, color: T.textFaint }}>or</span>
-                          <div style={{ flex: 1, height: 1, background: T.border }} />
+                        <div style={{ marginTop: 10 }}>
+                          <button
+                            type="button"
+                            onClick={() => fileRef.current?.click()}
+                            style={{
+                              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                              background: T.bgField, border: `1px dashed ${T.borderStrong}`,
+                              borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 600,
+                              color: T.textMuted, cursor: "pointer",
+                            }}
+                          >
+                            <Upload size={14} /> Upload Photo Instead
+                          </button>
                         </div>
-                      )}
-                      {!photo && !cropMode && (
-                        <button
-                          type="button"
-                          onClick={() => fileRef.current?.click()}
-                          style={{
-                            width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                            background: T.bgField, border: `1px dashed ${T.borderStrong}`,
-                            borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 600,
-                            color: T.textMuted, cursor: "pointer",
-                          }}
-                        >
-                          <Upload size={14} /> Upload Photo Instead
-                        </button>
                       )}
                       <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileUpload} />
                     </div>
@@ -1148,7 +1072,7 @@ export default function PublicCheckInPage() {
                           aspectRatio: "6/2",
                           border: `1px dashed ${T.borderStrong}`,
                           borderRadius: 12,
-                          background: "#ffffff",
+                          background: "var(--bg-card)",
                           position: "relative",
                         }}
                       >
@@ -1204,7 +1128,7 @@ export default function PublicCheckInPage() {
                     onClick={() => setStep((s) => (s - 1) as any)}
                     style={{
                       flex: 1,
-                      background: "#f3f4f8",
+                      background: "var(--bg-input)",
                       border: `1px solid ${T.borderStrong}`,
                       color: T.text,
                       borderRadius: 12,
@@ -1283,7 +1207,7 @@ export default function PublicCheckInPage() {
         {!checkedIn && (
           <div
             style={{
-              background: "#fbfbfe",
+              background: "var(--bg-panel)",
               border: `1px solid ${T.border}`,
               borderRadius: 20,
               padding: 24,

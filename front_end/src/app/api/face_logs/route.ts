@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     const limit = limitParam === "all" ? 5000 : limitParam ? parseInt(limitParam, 10) : 5000;
 
     // 1. Fetch detection logs with camera info from database (up to limit)
+    // Select only needed columns to avoid fetching unnecessary large fields
     const { data: logsData, error: logsError } = await supabase
       .from("face_logs")
-      .select("*, cameras(name, place)")
+      .select("id, person_name, person_id, confidence, snapshot_url, timestamp, created_at, camera_id, top_matches, cameras(name, place)")
       .order("timestamp", { ascending: false })
       .limit(isNaN(limit) ? 5000 : limit);
 

@@ -267,9 +267,9 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
         style={{
           width: "100%",
           maxWidth: 680,
-          background: "#ffffff",
+          background: "var(--bg-panel)",
           borderRadius: 18,
-          boxShadow: "0 25px 60px -15px rgba(0,0,0,0.35), 0 0 0 1px rgba(226,232,240,0.8)",
+          boxShadow: "0 25px 60px -15px rgba(0,0,0,0.5), 0 0 0 1px rgba(226,232,240,0.8)",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
@@ -280,11 +280,11 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
         <div
           style={{
             padding: "16px 20px",
-            borderBottom: "1px solid #e2e8f0",
+            borderBottom: "1px solid var(--border-strong)",
             display: "flex",
             alignItems: "center",
             gap: 12,
-            background: "#f8fafc",
+            background: "var(--bg-input)",
           }}
         >
           <Search size={20} color="#6366f1" />
@@ -303,7 +303,7 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
               background: "transparent",
               fontSize: 15,
               fontWeight: 600,
-              color: "#0f172a",
+              color: "var(--text-primary)",
               outline: "none",
             }}
           />
@@ -312,8 +312,8 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#64748b",
-                background: "#e2e8f0",
+                color: "var(--text-muted)",
+                background: "var(--border-strong)",
                 padding: "3px 7px",
                 borderRadius: 6,
                 fontFamily: "monospace",
@@ -330,8 +330,8 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
             display: "flex",
             alignItems: "center",
             padding: "8px 16px",
-            background: "#ffffff",
-            borderBottom: "1px solid #f1f5f9",
+            background: "var(--bg-panel)",
+            borderBottom: "1px solid var(--bg-hover)",
             gap: 6,
           }}
         >
@@ -354,8 +354,8 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
                 fontSize: 12,
                 fontWeight: 700,
                 border: "none",
-                background: selectedCategory === cat.id ? "#6366f1" : "#f1f5f9",
-                color: selectedCategory === cat.id ? "#ffffff" : "#64748b",
+                background: selectedCategory === cat.id ? "#6366f1" : "var(--bg-hover)",
+                color: selectedCategory === cat.id ? "#ffffff" : "var(--text-muted)",
                 cursor: "pointer",
                 transition: "all 0.15s",
               }}
@@ -368,9 +368,9 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
         {/* Command Items List */}
         <div style={{ maxHeight: 380, overflowY: "auto", padding: 8 }}>
           {filteredItems.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "#64748b" }}>
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
               <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>No commands or pages found for &quot;{query}&quot;</p>
-              <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "#94a3b8" }}>Try searching for &quot;Dashboard&quot;, &quot;Camera&quot;, or &quot;API&quot;</p>
+              <p style={{ margin: "4px 0 0 0", fontSize: 12, color: "var(--text-muted)" }}>Try searching for &quot;Dashboard&quot;, &quot;Camera&quot;, or &quot;API&quot;</p>
             </div>
           ) : (
             filteredItems.map((item, idx) => {
@@ -388,7 +388,7 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
                     alignItems: "center",
                     justifyContent: "space-between",
                     cursor: "pointer",
-                    background: isSelected ? "#f1f5f9" : "transparent",
+                    background: isSelected ? "var(--bg-hover)" : "transparent",
                     transition: "background 0.12s",
                   }}
                 >
@@ -398,20 +398,20 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
                         width: 34,
                         height: 34,
                         borderRadius: 10,
-                        background: isSelected ? "#6366f1" : "#f8fafc",
+                        background: isSelected ? "#6366f1" : "var(--bg-input)",
                         color: isSelected ? "#ffffff" : "#6366f1",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        border: isSelected ? "none" : "1px solid #e2e8f0",
+                        border: isSelected ? "none" : "1px solid var(--border-strong)",
                         transition: "all 0.15s",
                       }}
                     >
                       <IconComp size={16} />
                     </div>
                     <div>
-                      <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "#0f172a" }}>{item.title}</h4>
-                      <p style={{ margin: "2px 0 0 0", fontSize: 11.5, color: "#64748b" }}>{item.description}</p>
+                      <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-primary)" }}>{item.title}</h4>
+                      <p style={{ margin: "2px 0 0 0", fontSize: 11.5, color: "var(--text-muted)" }}>{item.description}</p>
                     </div>
                   </div>
 
@@ -421,8 +421,8 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
                         style={{
                           fontSize: 11,
                           fontWeight: 700,
-                          color: "#64748b",
-                          background: "#e2e8f0",
+                          color: "var(--text-muted)",
+                          background: "var(--border-strong)",
                           padding: "2px 6px",
                           borderRadius: 4,
                           fontFamily: "monospace",
@@ -431,7 +431,7 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
                         {item.shortcut}
                       </span>
                     )}
-                    <ArrowRight size={14} color={isSelected ? "#6366f1" : "#cbd5e1"} />
+                    <ArrowRight size={14} color={isSelected ? "#6366f1" : "var(--text-muted)"} />
                   </div>
                 </div>
               );
@@ -443,13 +443,13 @@ export default function CommandPaletteModal({ isOpen, onClose, onOpenSupport }: 
         <div
           style={{
             padding: "10px 16px",
-            background: "#f8fafc",
-            borderTop: "1px solid #e2e8f0",
+            background: "var(--bg-input)",
+            borderTop: "1px solid var(--border-strong)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             fontSize: 11.5,
-            color: "#64748b",
+            color: "var(--text-muted)",
           }}
         >
           <span>Use <strong>↑ ↓</strong> to navigate, <strong>Enter</strong> to select</span>

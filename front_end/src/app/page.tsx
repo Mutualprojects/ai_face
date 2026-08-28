@@ -193,7 +193,7 @@ function HomeContent() {
           gridMode === "single" ? (
             /* Single view — hero stream with full sidebar */
             <div className="snt-hero">
-              <WebRTCStream streamName={activeCam?.id || gridCameras[0].id} serverPort="8889" initialTab={currentTab} detectionOnly={false} />
+              <WebRTCStream streamName={activeCam?.id || gridCameras[0].id} serverPort="8891" initialTab={currentTab} detectionOnly={false} />
             </div>
           ) : (
             /* Live Stream Grid View (compact tiles) */
@@ -208,11 +208,11 @@ function HomeContent() {
                         <span className="snt-tilehead-name">{cam.name} <span style={{ opacity: 0.7, fontWeight: 500 }}>({cam.place})</span></span>
                       </div>
                       <span className="snt-tilehead-src">
-                        <Cctv size={10} color="#94a3b8" />
+                        <Cctv size={10} color="var(--text-muted)" />
                         {cam.source_type === "device" ? `USB Dev #${cam.device_index ?? 0}` : "RTSP"}
                       </span>
                     </div>
-                    <WebRTCStream streamName={cam.id} serverPort="8889" initialTab={currentTab} detectionOnly={true} />
+                    <WebRTCStream streamName={cam.id} serverPort="8891" initialTab={currentTab} detectionOnly={true} />
                   </div>
                 );
               })}
@@ -227,7 +227,7 @@ function HomeContent() {
       </main>
 
       <footer style={{
-        borderTop: "1px solid rgba(0,0,0,0.06)",
+        borderTop: "1px solid var(--border)",
         padding: "16px 24px",
         textAlign: "center",
         fontSize: 11,
@@ -239,8 +239,8 @@ function HomeContent() {
 
       <style>{`
         .snt-cambar{display:flex;align-items:center;gap:14;flex-wrap:wrap;padding:14px 16px;margin-bottom:20px;
-          background:rgba(255,255,255,0.85);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
-          border-radius:18px;border:1px solid rgba(255,255,255,0.65);box-shadow:var(--shadow-md)}
+          background:var(--bg-panel);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+          border-radius:18px;border:1px solid var(--border-strong);box-shadow:var(--shadow-md)}
 
         .snt-cambrand{display:flex;align-items:center;gap:10;flex-shrink:0}
         .snt-cambrand-icon{width:36px;height:36px;border-radius:12px;
@@ -252,35 +252,35 @@ function HomeContent() {
 
         .snt-chiprow{flex:1 1 280px;min-width:200px;display:flex;gap:8;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:thin}
         .snt-chip{display:inline-flex;align-items:center;gap:6;padding:7px 11px;border-radius:12px;white-space:nowrap;
-          background:#fff;border:1px solid var(--border-strong);color:var(--text-secondary);cursor:pointer;
+          background:var(--bg-panel);border:1px solid var(--border-strong);color:var(--text-secondary);cursor:pointer;
           font-family:inherit;font-size:11.5px;font-weight:650;transition:all .18s ease}
         .snt-chip:hover{border-color:var(--violet);box-shadow:var(--shadow-sm)}
         .snt-chip-active{border-color:var(--violet);background:var(--violet-soft);color:var(--violet-deep);box-shadow:0 0 0 3px rgba(99,102,241,0.12)}
         .snt-chip-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-        .snt-chip-dot-on{background:#10b981;box-shadow:0 0 6px #10b981}
-        .snt-chip-dot-off{background:#ef4444;opacity:0.8}
+        .snt-chip-dot-on{background:var(--green);box-shadow:0 0 6px var(--green)}
+        .snt-chip-dot-off{background:var(--red);opacity:0.8}
         .snt-chip-place{font-size:10px;font-weight:500;opacity:0.65}
 
         .snt-gridseg{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:12px;flex-shrink:0;
-          background:rgba(15,23,42,0.05);border:1px solid rgba(0,0,0,0.07)}
+          background:var(--bg-input);border:1px solid var(--border-strong)}
         .snt-gridseg-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:none;border-radius:9px;cursor:pointer;
-          background:transparent;color:#64748b;font-family:inherit;font-size:11px;font-weight:700;transition:all .15s ease}
+          background:transparent;color:var(--text-muted);font-family:inherit;font-size:11px;font-weight:700;transition:all .15s ease}
         .snt-gridseg-btn:hover{color:var(--violet-deep)}
-        .snt-gridseg-active{background:#fff;color:var(--violet-deep);box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+        .snt-gridseg-active{background:var(--bg-panel);color:var(--violet-deep);box-shadow:var(--shadow-sm)}
 
         .snt-addcam{flex-shrink:0}
 
-        .snt-pagecard{background:#ffffff;border-radius:20px;padding:24px;border:1px solid rgba(0,0,0,0.06);box-shadow:0 4px 20px rgba(0,0,0,0.04)}
+        .snt-pagecard{background:var(--bg-panel);border-radius:20px;padding:24px;border:1px solid var(--border);box-shadow:var(--shadow-md)}
         .snt-hero{width:100%}
 
         .snt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
-        .snt-gridtile{border-radius:18px;overflow:hidden;border:1px solid rgba(0,0,0,0.09);box-shadow:0 4px 18px rgba(0,0,0,0.05);background:#fff}
-        .snt-tilehead{display:flex;justify-content:space-between;align-items:center;gap:8;padding:10px 14px;background:#111827;color:#fff}
+        .snt-gridtile{border-radius:18px;overflow:hidden;border:1px solid var(--border-strong);box-shadow:var(--shadow-sm);background:var(--bg-panel)}
+        .snt-tilehead{display:flex;justify-content:space-between;align-items:center;gap:8;padding:10px 14px;background:var(--bg-card);color:var(--text-primary)}
         .snt-tilehead-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .snt-tilehead-src{display:inline-flex;align-items:center;gap:5;font-size:10px;color:#94a3b8;font-family:var(--font-mono)}
+        .snt-tilehead-src{display:inline-flex;align-items:center;gap:5;font-size:10px;color:var(--text-muted);font-family:var(--font-mono)}
 
         .snt-loading{display:flex;align-items:center;justify-content:center;gap:12;height:280px;color:var(--text-muted);
-          font-size:14px;background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.06)}
+          font-size:14px;background:var(--bg-panel);border-radius:16px;border:1px solid var(--border)}
         .snt-spin{width:22px;height:22px;border:3px solid rgba(99,102,241,0.25);border-top-color:#6366f1;border-radius:50%;animation:spin 0.8s linear infinite}
 
         @media (max-width: 720px){

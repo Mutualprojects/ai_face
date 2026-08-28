@@ -37,6 +37,7 @@ import { useAuth } from "./AuthProvider";
 import SupportModal from "./SupportModal";
 import CommandPaletteModal from "./CommandPaletteModal";
 import NotificationDrawer from "./NotificationDrawer";
+import ThemeToggle from "./ThemeToggle";
 
 interface TopBarProps {
   onToggleSidebar?: () => void;
@@ -103,6 +104,13 @@ const PAGE_DETAILS: Record<
     icon: Sparkles,
     color: "#0ea5e9",
     gradient: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+  },
+  "/users": {
+    title: "User Management",
+    subtitle: "Manage users, roles & access permissions",
+    icon: ShieldCheck,
+    color: "#f43f5e",
+    gradient: "linear-gradient(135deg, #f43f5e, #e11d48)",
   },
   "/settings": {
     title: "System Config",
@@ -176,8 +184,8 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .topbar-chip:hover {
-          background: #f1f5f9 !important;
-          border-color: #cbd5e1 !important;
+          background: var(--bg-hover) !important;
+          border-color: var(--border-strong) !important;
           transform: translateY(-1px);
         }
 
@@ -187,28 +195,29 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
           gap: 10px;
           padding: 7px 16px;
           border-radius: 11px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          color: #64748b;
+          background: var(--bg-input);
+          border: 1px solid var(--border-strong);
+          color: var(--text-muted);
           font-size: 12.5px;
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s ease;
           width: 280px;
+          min-height: 38px;
         }
         .topbar-search-btn:hover {
-          background: #ffffff;
-          border-color: #6366f1;
-          box-shadow: 0 4px 12px rgba(99,102,241,0.08);
-          color: #334155;
+          background: var(--bg-hover);
+          border-color: var(--violet);
+          box-shadow: 0 4px 12px rgba(99,102,241,0.15);
+          color: var(--text-secondary);
         }
         .topbar-hamburger {
           width: 38px;
           height: 38px;
           border-radius: 11px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          color: #475569;
+          background: var(--bg-input);
+          border: 1px solid var(--border-strong);
+          color: var(--text-secondary);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -217,13 +226,27 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
           flex-shrink: 0;
         }
         .topbar-hamburger:hover {
-          background: #ffffff;
-          border-color: #6366f1;
-          color: #6366f1;
-          box-shadow: 0 4px 12px rgba(99,102,241,0.12);
+          background: var(--bg-hover);
+          border-color: var(--violet);
+          color: var(--violet);
+          box-shadow: 0 4px 12px rgba(99,102,241,0.2);
         }
         .topbar-hamburger:active {
           transform: scale(0.96);
+        }
+        .topbar-title-wrap {
+          min-width: 0;
+          flex-shrink: 1;
+        }
+        .topbar-title-wrap h1 {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .topbar-title-wrap p {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .thb-desktop { display: none; align-items: center; }
         .thb-mobile { display: flex; align-items: center; }
@@ -244,6 +267,14 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
             display: none !important;
           }
         }
+        @media (max-width: 480px) {
+          .topbar-support-btn {
+            display: none !important;
+          }
+          .topbar-page-badge {
+            display: none !important;
+          }
+        }
         @keyframes statusBreathe {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.3); opacity: 0.6; }
@@ -254,18 +285,19 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
         style={{
           margin: 0,
           padding: "12px 24px",
-          background: "rgba(255, 255, 255, 0.85)",
+          background: "var(--bg-topbar)",
           backdropFilter: "blur(16px) saturate(1.4)",
           WebkitBackdropFilter: "blur(16px) saturate(1.4)",
-          borderBottom: "1px solid rgba(226, 232, 240, 0.9)",
+          borderBottom: "1px solid var(--border)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           position: "sticky",
           top: 0,
           zIndex: 40,
-          boxShadow: "0 2px 8px rgba(15,23,42,0.03)",
+          boxShadow: "var(--shadow-md)",
           flexShrink: 0,
+          gap: 12,
         }}
       >
         {/* LEFT: Sidebar Toggle + Page Icon & Title */}
@@ -284,6 +316,9 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
               {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
             </span>
           </button>
+
+          {/* Theme Toggle (Day/Night) */}
+          <ThemeToggle />
 
           {/* Page Icon Gradient Badge */}
           <div
@@ -313,13 +348,13 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
           </div>
 
           {/* Title & Subtitle */}
-          <div>
+          <div className="topbar-title-wrap">
             <h1
               style={{
                 margin: 0,
                 fontSize: 16.5,
                 fontWeight: 800,
-                color: "#0f172a",
+                color: "var(--text-primary)",
                 letterSpacing: "-0.025em",
                 lineHeight: 1.2,
               }}
@@ -327,10 +362,11 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
               {pageTitle}
             </h1>
             <p
+              className="hide-mobile"
               style={{
                 margin: "2px 0 0 0",
                 fontSize: 11.5,
-                color: "#64748b",
+                color: "var(--text-muted)",
                 fontWeight: 500,
               }}
             >
@@ -348,8 +384,8 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
               style={{
                 fontSize: 10.5,
                 fontWeight: 700,
-                color: "#94a3b8",
-                background: "#e2e8f0",
+                color: "var(--text-muted)",
+                background: "var(--bg-hover)",
                 padding: "2px 6px",
                 borderRadius: 5,
                 fontFamily: "monospace",
@@ -371,19 +407,19 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border-strong)",
                 borderRadius: 9,
                 padding: "6px 11px",
                 cursor: "pointer",
               }}
               title="Click for System Latency Breakdown"
             >
-              <Wifi size={13} style={{ color: "#6366f1" }} />
+              <Wifi size={13} style={{ color: "var(--violet)" }} />
               <span
                 style={{
                   fontSize: 11,
-                  color: "#334155",
+                  color: "var(--text-primary)",
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 700,
                 }}
@@ -402,28 +438,28 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                     top: "calc(100% + 10px)",
                     right: 0,
                     width: 240,
-                    background: "#ffffff",
-                    border: "1px solid #e2e8f0",
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border-strong)",
                     borderRadius: 14,
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                    boxShadow: "var(--shadow-lg)",
                     zIndex: 50,
                     padding: 16,
                     animation: "slideDown 0.15s ease",
                   }}
                 >
-                  <h4 style={{ margin: "0 0 10px 0", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>System Telemetry</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, color: "#475569" }}>
+                  <h4 style={{ margin: "0 0 10px 0", fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>System Telemetry</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, color: "var(--text-secondary)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>Flask REST API</span>
-                      <strong style={{ color: "#10b981" }}>{pingValue} ms</strong>
+                      <strong style={{ color: "var(--green-text)" }}>{pingValue} ms</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>Supabase Query</span>
-                      <strong style={{ color: "#10b981" }}>14 ms</strong>
+                      <strong style={{ color: "var(--green-text)" }}>14 ms</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>WebRTC Stream FPS</span>
-                      <strong style={{ color: "#3b82f6" }}>29.8 FPS</strong>
+                      <strong style={{ color: "var(--blue)" }}>29.8 FPS</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>InsightFace Model Cache</span>
@@ -440,8 +476,8 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                       width: "100%",
                       padding: "7px",
                       borderRadius: 8,
-                      background: "#e0e7ff",
-                      color: "#4338ca",
+                      background: "var(--violet-soft)",
+                      color: "var(--violet)",
                       fontWeight: 700,
                       fontSize: 11.5,
                       border: "none",
@@ -465,18 +501,18 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                 alignItems: "center",
                 gap: 6,
                 fontSize: 11.5,
-                color: "#334155",
+                color: "var(--text-primary)",
                 fontFamily: "'JetBrains Mono', monospace",
                 fontWeight: 700,
-                background: "#f8fafc",
+                background: "var(--bg-input)",
                 padding: "6px 12px",
                 borderRadius: 9,
-                border: "1px solid #e2e8f0",
+                border: "1px solid var(--border-strong)",
                 cursor: "pointer",
               }}
               title="Click to view timezones"
             >
-              <Clock size={13} style={{ color: "#6366f1" }} />
+              <Clock size={13} style={{ color: "var(--violet)" }} />
               <span>{time ? time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"}</span>
             </div>
 
@@ -484,23 +520,23 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
             {timePopover && (
               <>
                 <div style={{ position: "fixed", inset: 0, zIndex: 49 }} onClick={() => setTimePopover(false)} />
-                <div
+                  <div
                   style={{
                     position: "absolute",
                     top: "calc(100% + 10px)",
                     right: 0,
                     width: 220,
-                    background: "#ffffff",
-                    border: "1px solid #e2e8f0",
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border-strong)",
                     borderRadius: 14,
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                    boxShadow: "var(--shadow-lg)",
                     zIndex: 50,
                     padding: 14,
                     animation: "slideDown 0.15s ease",
                   }}
                 >
-                  <h4 style={{ margin: "0 0 8px 0", fontSize: 12.5, fontWeight: 800, color: "#0f172a" }}>World Time Clocks</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5, color: "#475569" }}>
+                  <h4 style={{ margin: "0 0 8px 0", fontSize: 12.5, fontWeight: 800, color: "var(--text-primary)" }}>World Time Clocks</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5, color: "var(--text-secondary)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span>Local Time</span>
                       <strong>{time ? time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</strong>
@@ -527,8 +563,8 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                background: "rgba(16,185,129,0.08)",
-                border: "1px solid rgba(16,185,129,0.25)",
+                background: "var(--green-dim)",
+                border: "1px solid rgba(16,185,129,0.2)",
                 borderRadius: 9,
                 padding: "6px 11px",
                 cursor: "pointer",
@@ -540,7 +576,7 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                   width: 7,
                   height: 7,
                   borderRadius: "50%",
-                  background: "#10b981",
+                  background: "var(--green)",
                   boxShadow: "0 0 6px rgba(16,185,129,0.6)",
                   display: "inline-block",
                   animation: "statusBreathe 2s ease-in-out infinite",
@@ -549,7 +585,7 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
               <span
                 style={{
                   fontSize: 10.5,
-                  color: "#059669",
+                  color: "var(--green-text)",
                   fontWeight: 800,
                   letterSpacing: "0.06em",
                 }}
@@ -568,20 +604,20 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
                     top: "calc(100% + 10px)",
                     right: 0,
                     width: 230,
-                    background: "#ffffff",
-                    border: "1px solid #e2e8f0",
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border-strong)",
                     borderRadius: 14,
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                    boxShadow: "var(--shadow-lg)",
                     zIndex: 50,
                     padding: 14,
                     animation: "slideDown 0.15s ease",
                   }}
                 >
-                  <h4 style={{ margin: "0 0 6px 0", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>Server Node Health</h4>
-                  <p style={{ margin: "0 0 10px 0", fontSize: 11.5, color: "#10b981", fontWeight: 700 }}>
+                  <h4 style={{ margin: "0 0 6px 0", fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>Server Node Health</h4>
+                  <p style={{ margin: "0 0 10px 0", fontSize: 11.5, color: "var(--green)", fontWeight: 700 }}>
                     ● All Systems Operational (99.98% Uptime)
                   </p>
-                  <div style={{ fontSize: 11, color: "#64748b", display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
                     <div>Region: <strong>localhost / US-East</strong></div>
                     <div>Active WebRTC Feeds: <strong>2 Streams</strong></div>
                     <div>Model Execution: <strong>GPU Accelerated</strong></div>
@@ -592,11 +628,12 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
           </div>
 
           {/* Vertical Divider */}
-          <div style={{ width: 1, height: 24, background: "#e2e8f0" }} />
+          <div style={{ width: 1, height: 24, background: "var(--border-strong)" }} />
 
           {/* INTERACTIVE SUPPORT HUB BUTTON */}
           <button
             onClick={() => openSupportModal("copilot")}
+            className="topbar-support-btn"
             style={{
               display: "flex",
               alignItems: "center",
@@ -642,8 +679,8 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
               width: 36,
               height: 36,
               borderRadius: 10,
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
+              background: "var(--bg-input)",
+              border: "1px solid var(--border-strong)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -652,7 +689,7 @@ export default function TopBar({ onToggleSidebar, isSidebarOpen = false, sidebar
             }}
             title="Surveillance Notifications"
           >
-            <Bell size={16} style={{ color: "#475569" }} />
+            <Bell size={16} style={{ color: "var(--text-secondary)" }} />
             <span
               style={{
                 position: "absolute",
@@ -744,21 +781,21 @@ function UserChip({
               top: "calc(100% + 10px)",
               right: 0,
               width: 240,
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
+              background: "var(--bg-panel)",
+              border: "1px solid var(--border-strong)",
               borderRadius: 16,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.14)",
+              boxShadow: "var(--shadow-lg)",
               zIndex: 50,
               overflow: "hidden",
               animation: "slideDown 0.15s ease",
             }}
           >
             {/* user info */}
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
-              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: "#0f172a" }}>
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 800, color: "var(--text-primary)" }}>
                 {session?.full_name || "Super Admin"}
               </p>
-              <p style={{ margin: "2px 0 8px", fontSize: 11.5, color: "#64748b" }}>
+              <p style={{ margin: "2px 0 8px", fontSize: 11.5, color: "var(--text-muted)" }}>
                 {session?.email || "superadmin@sentinel.local"}
               </p>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -767,7 +804,7 @@ function UserChip({
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 5,
-                    background: "rgba(99,102,241,0.08)",
+                    background: "var(--violet-soft)",
                     border: "1px solid rgba(99,102,241,0.2)",
                     borderRadius: 99,
                     padding: "2px 9px",
@@ -782,8 +819,8 @@ function UserChip({
             </div>
 
             {/* Duty status toggle */}
-            <div style={{ padding: "10px 16px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc" }}>
-              <span style={{ fontSize: 10.5, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase" }}>Duty Status</span>
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--bg-input)" }}>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase" }}>Duty Status</span>
               <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                 {[
                   { id: "on_duty", label: "🟢 On Duty" },
@@ -800,9 +837,9 @@ function UserChip({
                       fontSize: 10.5,
                       fontWeight: 700,
                       border: "none",
-                      background: dutyStatus === s.id ? "#ffffff" : "transparent",
+                      background: dutyStatus === s.id ? "var(--bg-panel)" : "transparent",
                       boxShadow: dutyStatus === s.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
-                      color: "#334155",
+                      color: "var(--text-secondary)",
                       cursor: "pointer",
                     }}
                   >
@@ -831,9 +868,9 @@ function UserChip({
                   cursor: "pointer",
                   fontSize: 12.5,
                   fontWeight: 600,
-                  color: "#334155",
+                  color: "var(--text-secondary)",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
               >
                 <LifeBuoy size={15} color="#6366f1" />
@@ -857,9 +894,9 @@ function UserChip({
                   cursor: "pointer",
                   fontSize: 12.5,
                   fontWeight: 600,
-                  color: "#334155",
+                  color: "var(--text-secondary)",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
               >
                 <Sparkles size={15} color="#0ea5e9" />
@@ -883,16 +920,16 @@ function UserChip({
                   cursor: "pointer",
                   fontSize: 12.5,
                   fontWeight: 600,
-                  color: "#334155",
+                  color: "var(--text-secondary)",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
               >
-                <Settings size={15} color="#64748b" />
+                <Settings size={15} color="var(--text-muted)" />
                 System Settings
               </button>
 
-              <div style={{ height: 1, background: "#f1f5f9", margin: "4px 0" }} />
+              <div style={{ height: 1, background: "var(--border)", margin: "4px 0" }} />
 
               <button
                 onClick={() => {
@@ -911,9 +948,9 @@ function UserChip({
                   cursor: "pointer",
                   fontSize: 12.5,
                   fontWeight: 600,
-                  color: "#ef4444",
+                  color: "var(--red)",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#fef2f2")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.12)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
               >
                 <LogOut size={15} />

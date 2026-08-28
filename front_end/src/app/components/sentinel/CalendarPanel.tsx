@@ -41,20 +41,20 @@ import {
 /* ------------------------------------------------------------------ */
 
 const TOKENS = {
-  ink: "#14162B",
-  paper: "#F4F5FA",
-  surface: "#FFFFFF",
-  line: "#E7E5F2",
-  accent: "#4838EB",
-  accentSoft: "#EFEDFF",
-  teal: "#0D8F82",
-  tealSoft: "#E7F8F6",
-  amber: "#B8720F",
-  amberSoft: "#FBF1DF",
-  rose: "#C31C55",
-  roseSoft: "#FCEAF0",
-  slate: "#5B5770",
-  slateSoft: "#F1F0F5",
+  ink: "var(--text-primary)",
+  paper: "var(--bg-deep)",
+  surface: "var(--bg-card)",
+  line: "var(--border-strong)",
+  accent: "var(--violet)",
+  accentSoft: "var(--violet-soft)",
+  teal: "var(--green)",
+  tealSoft: "var(--green-dim)",
+  amber: "var(--amber)",
+  amberSoft: "var(--amber-dim)",
+  rose: "var(--red)",
+  roseSoft: "var(--red-dim)",
+  slate: "var(--text-secondary)",
+  slateSoft: "var(--bg-hover)",
 };
 
 function purposeColors(purpose: string) {

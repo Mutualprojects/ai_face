@@ -44,21 +44,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const PUBLIC_ROUTES = ["/login", "/checkin", "/employee-register"];
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("sentinel_session");
-    if (stored) {
-      try {
+    try {
+      const stored = sessionStorage.getItem("sentinel_session");
+      if (stored) {
         const sess: SentinelSession = JSON.parse(stored);
-        // 24h expiry check
         if (Date.now() - sess.logged_in_at < 24 * 60 * 60 * 1000) {
           setSession(sess);
         } else {
           sessionStorage.removeItem("sentinel_session");
         }
-      } catch {
-        sessionStorage.removeItem("sentinel_session");
       }
+    } catch {
+      try { sessionStorage.removeItem("sentinel_session"); } catch {}
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   // Route guard
@@ -69,14 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
     if (session && pathname === "/login") {
-      router.replace("/");
+      router.replace("/dashboard");
     }
   }, [session, isLoading, pathname, router]);
 
   const login = useCallback((sess: SentinelSession) => {
     sessionStorage.setItem("sentinel_session", JSON.stringify(sess));
     setSession(sess);
-    router.replace("/");
+    router.replace("/dashboard");
   }, [router]);
 
   const logout = useCallback(() => {

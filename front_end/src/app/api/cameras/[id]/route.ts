@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { canonicalizeRtspUrl, looksMasked, parseRtsp } from "@/lib/rtsp";
 
 const supabaseUrl = process.env.SUPABASE_URL || "http://localhost:8005";
 const supabaseKey = process.env.SUPABASE_KEY || "";
@@ -36,11 +37,61 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Fetch the stored row FIRST — needed to keep the existing password
+    // when the edit form submits a password-free URL.
+    const { data: currentRow, error: fetchErr } = await supabase
+      .from("cameras")
+      .select("id, name, rtsp_url")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !currentRow) {
+      return NextResponse.json({ error: "Camera not found" }, { status: 404 });
+    }
+
     const updatePayload: any = {};
     if (body.name !== undefined) updatePayload.name = body.name;
-    if (body.rtsp_url !== undefined) updatePayload.rtsp_url = body.rtsp_url;
-    if (body.location !== undefined) updatePayload.place = body.location;
+    if (body.location !== undefined) updatePayload.location = body.location;
     if (body.place !== undefined) updatePayload.place = body.place;
+    if (body.zone !== undefined) updatePayload.zone = body.zone;
+    if (body.status !== undefined) updatePayload.status = body.status;
+    if (body.via_relay !== undefined) updatePayload.via_relay = Boolean(body.via_relay);
+
+    let canonicalUrl: string | null = null;
+    if (body.rtsp_url !== undefined && String(body.rtsp_url || "").trim()) {
+      if (looksMasked(String(body.rtsp_url))) {
+        return NextResponse.json(
+          { error: "RTSP URL contains a masked password (***). Enter the real camera password." },
+          { status: 400 }
+        );
+      }
+
+      // Credential merge:
+      //   - new password typed in the form  → use it
+      //   - password embedded in the URL    → use it
+      //   - neither                         → KEEP the stored password so
+      //     editing name/location never breaks authentication. A legacy
+      //     corrupted '***' password is never reused — it must be re-entered.
+      let mergedPassword: string | null = null;
+      const incoming = parseRtsp(String(body.rtsp_url));
+      if (incoming?.password) {
+        mergedPassword = incoming.password;
+      } else if (body.rtsp_password) {
+        mergedPassword = String(body.rtsp_password);
+      } else {
+        const stored = parseRtsp(String(currentRow.rtsp_url || ""));
+        if (stored?.password && !/^\*+$/.test(stored.password)) {
+          mergedPassword = stored.password;
+        }
+      }
+
+      try {
+        canonicalUrl = canonicalizeRtspUrl(String(body.rtsp_url), mergedPassword).url;
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      updatePayload.rtsp_url = canonicalUrl;
+    }
 
     const { data, error } = await supabase
       .from("cameras")
@@ -55,11 +106,12 @@ export async function PATCH(
     }
 
     // Keep the streaming relay + recognition worker in sync with the edit.
-    if (updatePayload.rtsp_url) {
+    if (canonicalUrl) {
       const backend = await notifyBackend("/api/cameras/activate", "POST", {
         id,
         name: updatePayload.name || data?.name,
-        rtsp_url: updatePayload.rtsp_url,
+        rtsp_url: canonicalUrl,
+        via_relay: Boolean(body.via_relay),
       });
       if (!backend.ok && backend.status !== 404) {
         console.warn("Backend camera activation (edit) warning:", backend.status, backend.data);
@@ -68,8 +120,7 @@ export async function PATCH(
 
     const mappedData = {
       ...data,
-      location: data.place,
-      status: "active"
+      location: data.location || data.place,
     };
 
     return NextResponse.json({ success: true, data: mappedData });

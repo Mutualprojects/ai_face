@@ -1,4 +1,5 @@
 import os
+import sys
 os.environ["OPENCV_LOG_LEVEL"] = "OFF"
 os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"
 import base64
@@ -25,6 +26,8 @@ import asyncio
 import websockets
 import threading
 import hmac
+import re
+import socket
 
 load_dotenv()
 
@@ -88,6 +91,17 @@ class Config:
 
     GO2RTC_RTSP_PORT = int(os.getenv("GO2RTC_RTSP_PORT", "8554"))
     WS_PORT = int(os.getenv("WS_PORT", "5001"))
+    MEDIAMTX_API_PORT = int(os.getenv("MEDIAMTX_API_PORT", "9997"))
+
+    # ── UNIVERSAL RTSP RELAY (firewalled / unreachable cameras) ──
+    # Some cameras live behind ACLs that block THIS host. If any other host
+    # (e.g. the DB server 172.30.0.200) CAN reach them, run go2rtc there and
+    # point these two vars at it. Cameras flagged via_relay are then pulled
+    # as: camera → relay (go2rtc) → local MediaMTX → recognition workers.
+    #   RTSP_RELAY_API_URL  e.g. http://172.30.0.200:1984  (go2rtc HTTP API)
+    #   RTSP_RELAY_RTSP_URL e.g. rtsp://172.30.0.200:8554  (go2rtc RTSP)
+    RTSP_RELAY_API_URL = os.getenv("RTSP_RELAY_API_URL", "").rstrip("/")
+    RTSP_RELAY_RTSP_URL = os.getenv("RTSP_RELAY_RTSP_URL", "").rstrip("/")
 
     # ── DEVICE CAMERAS ──────────────────────────────────────
     # Off by default: local webcams (/dev/videoX) must never be pulled
@@ -158,6 +172,62 @@ else:
         db_connection_status = "Failed"
         db_connection_error = str(e)
         log.error("Supabase connection failed: %s", e)
+
+# ── PORT GUARD (fail fast, before ANY heavy init) ──────────
+# If another instance of this backend already owns our ports, exit
+# immediately — BEFORE loading models, restarting mediamtx, or starting
+# camera workers. This guarantees exactly one live instance and zero
+# port conflicts with other applications.
+def _port_in_use(port: int) -> bool:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind(("0.0.0.0", port))
+        return False
+    except OSError:
+        return True
+    finally:
+        s.close()
+
+def _pid_owning_port(port: int):
+    try:
+        out = subprocess.run(
+            ["ss", "-tlnp", f"sport = :{port}"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        m = re.search(r"pid=(\d+)", out)
+        return int(m.group(1)) if m else None
+    except Exception:
+        return None
+
+def _cmdline_of(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read().replace(b"\0", b" ").decode(errors="replace").strip()
+    except Exception:
+        return ""
+
+def _ensure_ports_free():
+    # Under gunicorn the master process binds PORT before this worker imports
+    # the app — that listener is OURS, not a duplicate instance.
+    if "gunicorn" in os.path.basename(sys.argv[0] if sys.argv else ""):
+        return
+    wanted = list(dict.fromkeys([int(os.getenv("PORT", "5000")), Config.WS_PORT]))
+    conflicts = [(p, _pid_owning_port(p)) for p in wanted if _port_in_use(p)]
+    if not conflicts:
+        return
+    for p, pid in conflicts:
+        cmd = _cmdline_of(pid) if pid else ""
+        log.error("[Port Guard] Port %d is already in use by PID %s%s%s",
+                  p, pid or "?", f": {cmd}" if cmd else "", "")
+    log.error(
+        "[Port Guard] Another instance of this backend is already running. "
+        "Stop it first (kill the master PID above) or choose different "
+        "PORT / WS_PORT values. Refusing to start a duplicate instance."
+    )
+    raise SystemExit(1)
+
+_ensure_ports_free()
 
 # ── Load InsightFace Model ──────────────────────────────────
 log.info("Loading InsightFace model (preferring fast CPU-optimized 'buffalo_sc')...")
@@ -1087,13 +1157,114 @@ def analyze_frame(img, snapshot: _CacheSnapshot = None, run_yolo: bool = False,
 # MEDIAMTX STREAM UTILS (unchanged behaviour, logging swapped in)
 # ──────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────
+# VENDOR-AGNOSTIC RTSP SOURCE HANDLING
+#
+# The RTSP URL is treated as a fully OPAQUE source string. There are NO
+# vendor-specific conditionals anywhere (no "if Dahua", no "if Hikvision").
+# ANY valid rtsp:// URL — any vendor, model, port, path, query string,
+# auth style or stream naming — is accepted, connected and streamed:
+#
+#     ANY VALID RTSP URL → VALIDATE → CONNECT → STREAM
+#
+# Only transport-safety transforms are applied (never structural ones):
+#   - percent-decoding so ffmpeg receives real credentials
+#   - '$' → '%24' so MediaMTX/shell variable substitution ($RTSP_PORT,
+#     $MTX_PATH) cannot eat characters inside passwords
+#   - POSIX single-quote escaping for the ffmpeg command line
+# ──────────────────────────────────────────────────────────
+
+def validate_rtsp_url(raw_url: str) -> str:
+    """Structural validation only — zero assumptions about path/format.
+    Rejects masked credentials (admin:***) so a display-safe URL can never
+    be persisted back into the database as a real password."""
+    from urllib.parse import urlsplit
+    url = (raw_url or "").strip()
+    if not url:
+        raise ValueError("Empty RTSP URL")
+    if re.search(r":\*{2,}@", url):
+        raise ValueError(
+            "URL contains a masked password (***). "
+            "Enter the full RTSP URL with the real camera password."
+        )
+    parts = urlsplit(url)
+    if parts.scheme.lower() != "rtsp":
+        raise ValueError(f"Unsupported scheme '{parts.scheme or 'none'}' — URL must start with rtsp://")
+    if not parts.hostname:
+        raise ValueError("RTSP URL has no host — expected rtsp://[user:pass@]host[:port]/path[?query]")
+    return url
+
+def _mask_url(url: str) -> str:
+    """Hide credentials in anything shown to clients or logs."""
+    return re.sub(r"(//[^:/@]+:)[^@]+(@)", r"\1***\2", url)
+
+def _strip_password_url(url: str) -> str:
+    """URL safe to pre-fill an edit form: username kept, password removed."""
+    from urllib.parse import urlsplit, urlunsplit, quote
+    try:
+        parts = urlsplit(url or "")
+        if not parts.username:
+            return url
+        netloc = quote(str(parts.username), safe="")
+        if parts.password:
+            netloc += ":"
+        host = parts.hostname or ""
+        if parts.port:
+            host = f"{host}:{parts.port}"
+        return urlunsplit((parts.scheme, f"{netloc}@{host}", parts.path, parts.query, ""))
+    except Exception:
+        return url
+
+def _rtsp_credentials(raw_url: str) -> tuple:
+    """Raw (percent-DECODED) (username, password) from an RTSP URL."""
+    from urllib.parse import urlsplit, unquote
+    parts = urlsplit(raw_url or "")
+    if not parts.username:
+        return None, None
+    user = unquote(str(parts.username))
+    pwd = unquote(str(parts.password)) if parts.password else ""
+    return user, pwd
+
+def canonicalize_rtsp_url(raw_url: str, password_override: str = None) -> str:
+    """Single canonical storage form for ANY rtsp URL: credentials are
+    percent-encoded EXACTLY ONCE ($ → %24, @ → %40, % → %25 …), so every
+    consumer can safely unquote() before use and passwords containing
+    special characters survive round-trips through UI → DB → player."""
+    from urllib.parse import urlsplit, urlunsplit, quote
+    url = validate_rtsp_url(raw_url)
+    parts = urlsplit(url)
+    user, pwd = _rtsp_credentials(url)
+    if password_override is not None:
+        pwd = password_override
+        user = user if user is not None else ""
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    netloc = host
+    if user is not None:
+        userinfo = quote(user, safe="")
+        if pwd:
+            userinfo += ":" + quote(pwd, safe="")
+        netloc = f"{userinfo}@{netloc}"
+    return urlunsplit((parts.scheme.lower(), netloc, parts.path, parts.query, ""))
+
+def _credentials_corrupted(rtsp_url: str) -> bool:
+    """True when a stored row holds the literal '***' mask as its password
+    (legacy bug) — the UI must force re-entering the real password."""
+    _, pwd = _rtsp_credentials(rtsp_url or "")
+    return bool(pwd) and set(pwd) == {"*"}
+
+def _shell_single_quote(s: str) -> str:
+    """POSIX-safe single quoting (survives passwords containing quotes)."""
+    return "'" + s.replace("'", "'\\''") + "'"
+
 def detect_codec_and_width(stream_url: str) -> tuple:
     from urllib.parse import unquote
     decoded_url = unquote(stream_url)
     codec = "unknown"
     width = None
     try:
-        cmd = ["ffprobe", "-v", "quiet"]
+        cmd = ["/usr/bin/ffprobe", "-v", "quiet"]
         if decoded_url.lower().startswith("rtsp://"):
             cmd.extend(["-rtsp_transport", "tcp"])
         cmd.extend([
@@ -1111,36 +1282,331 @@ def detect_codec_and_width(stream_url: str) -> tuple:
                         width = int(val.strip())
                     except ValueError:
                         pass
-        log.info("Detected codec: %s, width: %s", codec, width)
+        log.info("[Camera Src] probe: codec=%s width=%s url=%s", codec, width, _mask_url(decoded_url))
         return codec, width
     except Exception as e:
-        log.warning("ffprobe failed: %s", e)
+        log.warning("[Camera Src] ffprobe failed for %s: %s", _mask_url(decoded_url), e)
         return "unknown", None
 
-def build_mediamtx_src(stream_url: str) -> dict:
+# ── UNIVERSAL RTSP RELAY ────────────────────────────────────
+# go2rtc on a host that CAN reach a blocked camera. Streams are created
+# dynamically through its HTTP API and consumed as plain rtsp:// URLs.
+
+VIA_RELAY_COLUMN_OK = False   # set True at startup when the DB column exists
+
+def relay_configured() -> bool:
+    return bool(Config.RTSP_RELAY_API_URL and Config.RTSP_RELAY_RTSP_URL)
+
+def register_relay_stream(camera_id: str, real_url: str) -> bool:
+    """Create/update the upstream pull on the go2rtc relay (idempotent)."""
+    if not relay_configured():
+        return False
+    try:
+        r = requests.put(
+            f"{Config.RTSP_RELAY_API_URL}/api/streams/{camera_id}",
+            params={"src": real_url},
+            timeout=8,
+        )
+        if r.status_code in (200, 201):
+            log.info("[Relay] upstream registered for '%s'", camera_id)
+            return True
+        log.error("[Relay] register failed for '%s': %s %s", camera_id, r.status_code, r.text[:200])
+    except Exception as e:
+        log.error("[Relay] register error for '%s': %s", camera_id, e)
+    return False
+
+def delete_relay_stream(camera_id: str):
+    if not relay_configured():
+        return
+    try:
+        requests.delete(
+            f"{Config.RTSP_RELAY_API_URL}/api/streams/{camera_id}", timeout=5)
+        log.info("[Relay] upstream removed for '%s'", camera_id)
+    except Exception as e:
+        log.debug("[Relay] delete error for '%s': %s", camera_id, e)
+
+def effective_source_url(rtsp_url: str, via_relay: bool, camera_id: str = "") -> str:
+    """The URL THIS backend should actually connect to: the relay pull for
+    via_relay cameras, otherwise the stored direct URL."""
+    if via_relay and relay_configured():
+        return f"{Config.RTSP_RELAY_RTSP_URL}/{camera_id}"
+    return rtsp_url
+
+def ensure_via_relay_column():
+    """Detect once whether migration_cameras_via_relay.sql was applied."""
+    global VIA_RELAY_COLUMN_OK
+    try:
+        supabase.table("cameras").select("id,via_relay").limit(1).execute()
+        VIA_RELAY_COLUMN_OK = True
+    except Exception:
+        VIA_RELAY_COLUMN_OK = False
+        log.info("[Relay] cameras.via_relay column absent — using local "
+                 ".relay_flags.json until migration_cameras_via_relay.sql is run.")
+
+# Local fallback store for per-camera relay flags when the DB column does
+# not exist yet. Survives restarts; authoritative only until the migration
+# is applied (after that the DB column wins).
+RELAY_FLAGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".relay_flags.json")
+
+def _load_relay_flags() -> dict:
+    try:
+        with open(RELAY_FLAGS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_relay_flag(cam_id: str, enabled: bool):
+    flags = _load_relay_flags()
+    if enabled:
+        flags[cam_id] = True
+    else:
+        flags.pop(cam_id, None)
+    try:
+        tmp = RELAY_FLAGS_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(flags, f)
+        os.replace(tmp, RELAY_FLAGS_FILE)
+    except Exception as e:
+        log.error("[Relay] persisting flag failed for '%s': %s", cam_id, e)
+
+def _via_relay_flag(value) -> bool:
+    return bool(value) and str(value).lower() in ("true", "1", "yes", "on")
+
+def _cameras_select(base: str) -> str:
+    """Include via_relay in a cameras select only when the column exists."""
+    return f"{base},via_relay" if VIA_RELAY_COLUMN_OK else base
+
+def _cam_via_relay(cam: dict) -> bool:
+    if VIA_RELAY_COLUMN_OK:
+        return _via_relay_flag(cam.get("via_relay"))
+    return bool(_load_relay_flags().get(cam.get("id") or ""))
+
+def _store_via_relay(camera_id: str, enabled: bool):
+    """Persist the flag wherever it lives (DB column or local store)."""
+    if VIA_RELAY_COLUMN_OK:
+        return   # caller already writes it inside the row payload
+    _save_relay_flag(camera_id, enabled)
+
+def build_mediamtx_src(stream_url: str, camera_id: str = None, via_relay: bool = False) -> dict:
+    """Build the MediaMTX path entry for ANY valid RTSP URL.
+
+    H.264 sources  → passed DIRECTLY to MediaMTX as `source` (true
+                     pass-through, zero transcode, auto-reconnect).
+    Everything else (HEVC, unknown, probe-failed) → ffmpeg runOnDemand
+    pull that normalises ANY codec to H.264 so WebRTC/WHEP + HLS always
+    work. runOnDemandRestart provides automatic reconnection.
+
+    via_relay=True routes the pull through the external go2rtc relay so
+    cameras unreachable from this host still stream (camera → relay → here).
+    """
     from urllib.parse import unquote
-    decoded_url = unquote(stream_url)
-    if "$" in decoded_url:
-        decoded_url = decoded_url.replace("$", "%24")
+
+    if via_relay:
+        if not camera_id:
+            raise ValueError("via_relay requires a camera id")
+        if not relay_configured():
+            raise ValueError(
+                "Relay not configured — set RTSP_RELAY_API_URL and "
+                "RTSP_RELAY_RTSP_URL in Backend/.env"
+            )
+        if not register_relay_stream(camera_id, validate_rtsp_url(stream_url)):
+            raise ValueError(f"Could not register upstream on the relay server for '{camera_id}'")
+        # From here on we treat the RELAY as the source.
+        stream_url = f"{Config.RTSP_RELAY_RTSP_URL}/{camera_id}"
+        log.info("[Camera Src] '%s' routed via relay %s", camera_id, Config.RTSP_RELAY_RTSP_URL)
+
+    raw = validate_rtsp_url(stream_url)
+    decoded_url = unquote(raw)
+
+    # Transport-safe escaping ONLY — the URL structure stays untouched.
+    transport_url = decoded_url.replace("$", "%24")
 
     codec, width = detect_codec_and_width(decoded_url)
 
-    if codec in ("hevc", "h265"):
-        log.info("HEVC detected — will use high-quality ffmpeg transcode via runOnDemand")
-        vf_scale = ""
-        if width and width > 1280:
-            vf_scale = "-vf scale=1280:-2 "
-            log.info("Adding downscale filter (1280x720) for stream width %s", width)
+    if codec in ("h264", "avc"):
+        log.info("[Camera Src] H.264 detected → direct MediaMTX source pass-through")
+        return {"source": transport_url}
 
-        input_flags = "-rtsp_transport tcp " if decoded_url.lower().startswith("rtsp://") else ""
-        return {
-            "source": "publisher",
-            "runOnDemand": f"ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize 100000 {input_flags}-i '{decoded_url}' {vf_scale}-c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH",
-            "runOnDemandRestart": True,
-            "runOnDemandCloseAfter": "10s"
-        }
+    log.info("[Camera Src] codec=%s → ffmpeg normalisation via runOnDemand (auto-reconnect on)", codec)
+    vf_scale = ""
+    if width and width > 1280:
+        vf_scale = "-vf scale=1280:-2 "
+        log.info("[Camera Src] adding downscale filter for width %s", width)
 
-    return {"source": decoded_url}
+    input_flags = "-rtsp_transport tcp " if decoded_url.lower().startswith("rtsp://") else ""
+    return {
+        "source": "publisher",
+        "runOnDemand": (
+            "/usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero "
+            "-fflags nobuffer+discardcorrupt -flags low_delay "
+            f"-analyzeduration 100000 -probesize 100000 {input_flags}"
+            f"-i {_shell_single_quote(transport_url)} {vf_scale}"
+            "-c:v libx264 -preset ultrafast -tune zerolatency -crf 20 "
+            "-pix_fmt yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an "
+            "-f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH"
+        ),
+        "runOnDemandRestart": True,
+        "runOnDemandCloseAfter": "10s"
+    }
+
+# ── CAMERA CONNECTION STATES ────────────────────────────────
+# CONNECTING   → MediaMTX is pulling / path registered, no media yet
+# ONLINE       → publisher live in MediaMTX
+# OFFLINE      → host unreachable / port closed / DNS failure
+# AUTH_FAILED  → camera rejected credentials (401/403)
+# RTSP_ERROR   → reachable but RTSP handshake/stream error
+CAMERA_STATES = {}                       # cam_id -> {state, detail, checked_at}
+CAMERA_STATES_LOCK = threading.Lock()
+CAMERA_STATES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".camera_states.json")
+
+def _set_camera_state(cam_id: str, state: str, detail: str = ""):
+    entry = {
+        "state": state,
+        "detail": detail,
+        "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    with CAMERA_STATES_LOCK:
+        CAMERA_STATES[cam_id] = entry
+    # Persist so ANY process (gunicorn master/worker) can read probe results.
+    try:
+        with CAMERA_STATES_LOCK:
+            snapshot = dict(CAMERA_STATES)
+        tmp = CAMERA_STATES_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(snapshot, f)
+        os.replace(tmp, CAMERA_STATES_FILE)
+    except Exception as e:
+        log.debug("[Health] state persist failed: %s", e)
+
+def _load_camera_state(cam_id: str):
+    """Read a probe result from the shared states file (cross-process)."""
+    try:
+        with open(CAMERA_STATES_FILE) as f:
+            return json.load(f).get(cam_id)
+    except Exception:
+        with CAMERA_STATES_LOCK:
+            return CAMERA_STATES.get(cam_id)
+
+def _classify_probe_failure(stderr_text: str, timed_out: bool) -> tuple:
+    s = (stderr_text or "").lower()
+    if timed_out:
+        return "OFFLINE", "probe timeout — host unreachable or RTSP port blocked"
+    if "401" in s or "403" in s or "unauthorized" in s or "authorization failed" in s:
+        return "AUTH_FAILED", "camera rejected credentials (401/403)"
+    if any(k in s for k in ("connection refused", "no route", "unreachable",
+                            "timed out", "connection reset", "could not resolve",
+                            "name or service not known", "network is down")):
+        return "OFFLINE", "host unreachable / port closed / DNS failure"
+    return "RTSP_ERROR", (stderr_text or "ffprobe failed").strip().splitlines()[-1][:200] if stderr_text else "RTSP handshake/stream error"
+
+def probe_camera_state(camera_id: str, rtsp_url: str) -> dict:
+    """Active ffprobe of an opaque RTSP URL — used when MediaMTX has no
+    live publisher for the path. Returns {state, detail}."""
+    from urllib.parse import unquote
+    decoded = unquote(rtsp_url)
+    cmd = ["/usr/bin/ffprobe", "-v", "error", "-rtsp_transport", "tcp",
+           "-i", decoded, "-select_streams", "v:0",
+           "-show_entries", "stream=codec_name", "-of", "default=nw=1"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return {"state": "ONLINE", "detail": "RTSP source reachable"}
+        state, detail = _classify_probe_failure(r.stderr, False)
+        log.info("[Health] probe %s -> %s | technical: %s",
+                 camera_id, state, (r.stderr or "").strip()[:300])
+    except subprocess.TimeoutExpired:
+        state, detail = _classify_probe_failure("", True)
+        log.info("[Health] probe %s -> %s | technical: ffprobe timeout (10s)", camera_id, state)
+    except Exception as e:
+        state, detail = "RTSP_ERROR", str(e)
+        log.info("[Health] probe %s -> %s | technical: %s", camera_id, state, e)
+    return {"state": state, "detail": detail}
+
+def _mediamtx_paths_snapshot() -> dict:
+    try:
+        r = requests.get(
+            f"http://127.0.0.1:{Config.MEDIAMTX_API_PORT}/v3/paths/list", timeout=3)
+        if r.ok:
+            return {p["name"]: p for p in r.json().get("items", [])}
+    except Exception:
+        pass
+    return {}
+
+def _probe_and_store(cam_id: str, rtsp_url: str):
+    try:
+        r = probe_camera_state(cam_id, rtsp_url)
+        _set_camera_state(cam_id, r["state"], r["detail"])
+    except Exception as e:
+        log.error("[Health] initial probe failed for '%s': %s", cam_id, e)
+
+def camera_health_monitor():
+    """Periodic connection-state monitor. Uses MediaMTX's own view first
+    (cheap, exact); only actively probes sources with no live publisher."""
+    interval = float(os.getenv("CAMERA_HEALTH_INTERVAL", "45"))
+    log.info("[Health] Camera connection-state monitor started (every %.0fs).", interval)
+    while True:
+        try:
+            res = supabase.table("cameras").select(_cameras_select("id,rtsp_url")).execute()
+            paths = _mediamtx_paths_snapshot()
+            for cam in (res.data or []):
+                cam_id = cam["id"]
+                url = cam.get("rtsp_url") or ""
+                if not url or url.startswith("device:"):
+                    continue
+                info = paths.get(cam_id)
+                if info and info.get("ready"):
+                    _set_camera_state(cam_id, "ONLINE", "publishing via MediaMTX")
+                    continue
+                if info and info.get("source"):
+                    _set_camera_state(cam_id, "CONNECTING", "MediaMTX is pulling the source")
+                    continue
+                r = probe_camera_state(
+                    cam_id, effective_source_url(url, _cam_via_relay(cam), cam_id))
+                _set_camera_state(cam_id, r["state"], r["detail"])
+        except Exception as e:
+            log.error("[Health] monitor cycle failed: %s", e)
+        time.sleep(interval)
+
+def regenerate_all_mediamtx_entries() -> bool:
+    """DB is the single source of truth: rebuild every mediamtx path entry
+    from the cameras table at startup so stale/hand-edited entries can
+    never linger. Returns True if the file changed (caller restarts)."""
+    if supabase is None:
+        return False
+    try:
+        import yaml
+        res = supabase.table("cameras").select(_cameras_select("id,rtsp_url")).execute()
+        with open(MEDIAMTX_YAML) as f:
+            cfg = yaml.safe_load(f) or {}
+        paths = cfg.setdefault("paths", {}) or {}
+        changed = False
+        for cam in (res.data or []):
+            cid, url = cam["id"], (cam.get("rtsp_url") or "")
+            if not url or url.startswith("device:"):
+                continue
+            try:
+                entry = build_mediamtx_src(url, camera_id=cid, via_relay=_cam_via_relay(cam))
+            except ValueError as ve:
+                log.warning("[Regen] skipping '%s': %s", cid, ve)
+                continue
+            if paths.get(cid) != entry:
+                paths[cid] = entry
+                changed = True
+                log.info("[Regen] mediamtx entry rebuilt for '%s'", cid)
+        # Drop yml entries with no DB row (orphans from deleted cameras)
+        db_ids = {c["id"] for c in (res.data or [])}
+        for cid in list(paths.keys()):
+            if cid not in db_ids and cid != "all_others":
+                del paths[cid]
+                changed = True
+                log.info("[Regen] removed orphaned mediamtx entry '%s'", cid)
+        if changed:
+            with open(MEDIAMTX_YAML, "w") as f:
+                yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+        return changed
+    except Exception as e:
+        log.error("[Regen] failed: %s", e)
+        return False
 
 def write_mediamtx_yaml_entry(camera_id: str, cfg_dict: dict):
     try:
@@ -1155,7 +1621,6 @@ def write_mediamtx_yaml_entry(camera_id: str, cfg_dict: dict):
         log.info("mediamtx.yml updated for '%s'", camera_id)
     except Exception as e:
         log.error("Failed to update mediamtx.yml: %s", e)
-
 def restart_mediamtx():
     try:
         subprocess.run(["pkill", "-f", "mediamtx"], timeout=3, capture_output=True)
@@ -1784,6 +2249,10 @@ def start_all_workers():
             refresh_cache()
         except Exception as _r:
             log.warning("[Workers] Initial cache refresh failed: %s", _r)
+        # DB is the source of truth — rebuild every mediamtx entry so stale
+        # or hand-edited camera entries can never linger across restarts.
+        if regenerate_all_mediamtx_entries():
+            restart_mediamtx()
         res = supabase.table("cameras").select("*").execute()
         cameras = res.data or []
         with WORKERS_LOCK:
@@ -1902,12 +2371,19 @@ def auto_cleanup_unknown_logs_worker():
 
 if supabase is not None:
     try:
+        # Detect relay support (cameras.via_relay column) before anything
+        # reads or writes camera rows.
+        ensure_via_relay_column()
+        if relay_configured():
+            log.info("[Relay] external RTSP relay configured: api=%s rtsp=%s",
+                     Config.RTSP_RELAY_API_URL, Config.RTSP_RELAY_RTSP_URL)
         # Ensure the matching cache is warm BEFORE camera workers go live —
         # otherwise the first minutes log every face as "Unknown".
         refresh_cache()
         start_all_workers()
         threading.Thread(target=cache_refresh_worker, daemon=True, name="cache-refresh").start()
         threading.Thread(target=auto_cleanup_unknown_logs_worker, daemon=True, name="unknown-logs-cleaner").start()
+        threading.Thread(target=camera_health_monitor, daemon=True, name="camera-health").start()
     except Exception as _w_err:
         log.error("[Workers] Could not start workers on boot: %s", _w_err)
 
@@ -2750,6 +3226,11 @@ def get_camera_snapshot_direct(camera_id):
             return jsonify({"error": "Camera not found"}), 404
         
         rtsp_url = res.data[0]["rtsp_url"]
+        # Stored URLs hold percent-encoded credentials — decode for direct
+        # OpenCV/ffmpeg consumption (same contract as build_mediamtx_src).
+        if rtsp_url and not str(rtsp_url).startswith("device:"):
+            from urllib.parse import unquote as _uq
+            rtsp_url = _uq(str(rtsp_url))
         import cv2
         import base64
         
@@ -2775,10 +3256,69 @@ def get_camera_snapshot_direct(camera_id):
 def get_cameras():
     try:
         res = supabase.table("cameras").select("*").order("created_at").execute()
-        return jsonify(res.data or [])
+        states = {cid: s.get("state") for cid, s in _compute_camera_states().items()}
+        out = []
+        for c in (res.data or []):
+            c = dict(c)
+            stored_url = str(c.get("rtsp_url") or "")
+            # Never expose RTSP credentials through the API.
+            if stored_url and not stored_url.startswith("device:"):
+                c["rtsp_url"] = _mask_url(stored_url)
+                # Password-free URL the edit form can safely pre-fill.
+                c["rtsp_url_editable"] = _strip_password_url(stored_url)
+                _, pwd = _rtsp_credentials(stored_url)
+                c["has_credentials"] = bool(pwd)
+                c["credentials_corrupted"] = _credentials_corrupted(stored_url)
+            else:
+                c["rtsp_url_editable"] = stored_url or None
+                c["has_credentials"] = False
+                c["credentials_corrupted"] = False
+            if not c.get("location") and c.get("place"):
+                c["location"] = c["place"]
+            c["via_relay"] = _cam_via_relay(c)
+            c["stream_state"] = states.get(c["id"], "CONNECTING")
+            out.append(c)
+        return jsonify(out)
     except Exception as e:
         log.error("Error fetching cameras from DB: %s", e)
         return jsonify([])
+
+def _compute_camera_states() -> dict:
+    """Authoritative per-camera connection states, computed on demand.
+    MediaMTX's own view is used first (exact, cheap); active probes are
+    only needed for sources with no live publisher, and those results are
+    cached by the background health monitor."""
+    paths = _mediamtx_paths_snapshot()
+    try:
+        res = supabase.table("cameras").select("id,rtsp_url").execute()
+        cams = res.data or []
+    except Exception as e:
+        log.error("[Health] DB fetch failed: %s", e)
+        cams = []
+    out = {}
+    for cam in cams:
+        cid = cam["id"]
+        url = cam.get("rtsp_url") or ""
+        if not url or url.startswith("device:"):
+            continue
+        info = paths.get(cid)
+        if info and info.get("ready"):
+            st = {"state": "ONLINE", "detail": "publishing via MediaMTX",
+                  "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        elif info and info.get("source"):
+            st = {"state": "CONNECTING", "detail": "MediaMTX is pulling the source",
+                  "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        else:
+            cached = _load_camera_state(cid)
+            st = cached or {"state": "CONNECTING", "detail": "awaiting first probe",
+                            "checked_at": None}
+        out[cid] = st
+    return out
+
+@app.route("/api/cameras/status", methods=["GET"])
+def get_camera_states():
+    """Live connection states for every camera."""
+    return jsonify(_compute_camera_states())
 
 @app.route("/api/cameras", methods=["POST"])
 @require_api_key
@@ -2821,19 +3361,65 @@ def add_camera():
     rtsp_url = data.get("rtsp_url")
     if not rtsp_url:
         return jsonify({"error": "Missing rtsp_url"}), 400
+    via_relay = _via_relay_flag(data.get("via_relay"))
+    if via_relay and not relay_configured():
+        return jsonify({"error": "Relay server not configured — set RTSP_RELAY_API_URL and RTSP_RELAY_RTSP_URL in Backend/.env"}), 400
+
+    # Canonical storage form: credentials percent-encoded exactly once.
+    # Accepts the password either embedded in the URL or as a separate
+    # field (recommended — UI never has to echo it back).
+    try:
+        rtsp_url = canonicalize_rtsp_url(rtsp_url, password_override=data.get("rtsp_password") or None)
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    # Duplicate stream guard: same host+path already registered.
+    from urllib.parse import urlsplit
+    try:
+        existing = supabase.table("cameras").select("id,name,rtsp_url").execute()
+        for row in (existing.data or []):
+            other = row.get("rtsp_url") or ""
+            if other.startswith("device:"):
+                continue
+            a, b = urlsplit(rtsp_url), urlsplit(other)
+            if (a.hostname, a.port, a.path) == (b.hostname, b.port, b.path):
+                return jsonify({
+                    "error": f"This camera/stream is already registered as '{row['name']}' (ID: {row['id']}). "
+                             "Edit that camera instead of adding it twice."
+                }), 409
+    except Exception as e:
+        log.warning("[Camera] duplicate check skipped: %s", e)
 
     new_id = f"camera_{uuid.uuid4().hex[:8]}"
     new_camera = {"id": new_id, "name": name, "place": place, "rtsp_url": rtsp_url}
+    if VIA_RELAY_COLUMN_OK:
+        new_camera["via_relay"] = via_relay
+    else:
+        _store_via_relay(new_id, via_relay)
 
     try:
         supabase.table("cameras").insert(new_camera).execute()
     except Exception as e:
+        msg = str(e)
+        if "duplicate key" in msg.lower():
+            return jsonify({"error": f"Camera ID already exists"}), 409
         log.error("Error inserting camera to DB: %s", e)
         return jsonify({"error": "Database error"}), 500
 
-    src = build_mediamtx_src(rtsp_url)
+    try:
+        src = build_mediamtx_src(rtsp_url, camera_id=new_id, via_relay=via_relay)
+    except ValueError as ve:
+        supabase.table("cameras").delete().eq("id", new_id).execute()
+        _store_via_relay(new_id, False)
+        return jsonify({"error": f"Invalid RTSP URL: {ve}"}), 400
     write_mediamtx_yaml_entry(new_id, src)
     restart_mediamtx()
+    _set_camera_state(new_id, "CONNECTING", "registered — probing source")
+    threading.Thread(
+        target=_probe_and_store,
+        args=(new_id, effective_source_url(rtsp_url, via_relay, new_id)),
+        daemon=True,
+    ).start()
 
     with WORKERS_LOCK:
         if new_id not in CAMERA_WORKERS:
@@ -2841,6 +3427,8 @@ def add_camera():
             CAMERA_WORKERS[new_id] = w
             w.start()
 
+    new_camera = dict(new_camera)
+    new_camera["rtsp_url"] = _mask_url(new_camera["rtsp_url"])
     return jsonify({"success": True, "camera": new_camera})
 
 @app.route("/api/cameras/<camera_id>", methods=["DELETE"])
@@ -2857,7 +3445,11 @@ def delete_camera(camera_id):
 
     remove_mediamtx_yaml_entry(camera_id)
     restart_mediamtx()
+    delete_relay_stream(camera_id)
+    _store_via_relay(camera_id, False)
     stop_camera_worker(camera_id)
+    with CAMERA_STATES_LOCK:
+        CAMERA_STATES.pop(camera_id, None)
     with LATEST_DETECTIONS_LOCK:
         LATEST_DETECTIONS.pop(camera_id, None)
     with PRESENCE_LOCK:
@@ -2881,27 +3473,67 @@ def activate_camera():
     data = request.json or {}
     camera_id = data.get("id")
     rtsp_url = data.get("rtsp_url")
+    via_relay = _via_relay_flag(data.get("via_relay"))
     if not camera_id:
         return jsonify({"error": "Missing camera id"}), 400
     if not rtsp_url or str(rtsp_url).lower() in ("null", "none", ""):
         return jsonify({"error": "Missing rtsp_url"}), 400
+    if via_relay and not relay_configured():
+        return jsonify({"error": "Relay server not configured — set RTSP_RELAY_API_URL and RTSP_RELAY_RTSP_URL in Backend/.env"}), 400
 
-    # Make sure a DB row exists for this camera (created via the UI).
+    # Merge credentials: the UI sends a password-free URL (it never sees the
+    # real one). If no new password was supplied, reuse the stored one so an
+    # edit of name/location never silently breaks authentication.
+    try:
+        _, incoming_pwd = _rtsp_credentials(str(rtsp_url))
+        override = data.get("rtsp_password") or None
+        if not incoming_pwd and not override:
+            try:
+                row = supabase.table("cameras").select("rtsp_url").eq("id", camera_id).execute()
+                if row.data and row.data[0].get("rtsp_url"):
+                    old_user, old_pwd = _rtsp_credentials(str(row.data[0]["rtsp_url"]))
+                    if old_pwd and not _credentials_corrupted(row.data[0]["rtsp_url"]):
+                        override = old_pwd
+            except Exception:
+                pass
+        rtsp_url = canonicalize_rtsp_url(str(rtsp_url), password_override=override)
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    # Make sure a DB row exists for this camera (created via the UI) and
+    # keep its stored URL in sync with the canonicalised one.
     try:
         res = supabase.table("cameras").select("id").eq("id", camera_id).execute()
+        row_payload = {"rtsp_url": rtsp_url}
+        if VIA_RELAY_COLUMN_OK:
+            row_payload["via_relay"] = via_relay
         if not res.data:
             supabase.table("cameras").insert({
                 "id": camera_id,
                 "name": data.get("name") or camera_id,
                 "place": data.get("place") or data.get("location"),
-                "rtsp_url": rtsp_url,
+                **row_payload,
             }).execute()
+        else:
+            supabase.table("cameras").update(row_payload).eq("id", camera_id).execute()
     except Exception as e:
         log.error("[Camera activate] DB ensure failed for '%s': %s", camera_id, e)
 
-    src = build_mediamtx_src(rtsp_url)
+    try:
+        src = build_mediamtx_src(rtsp_url, camera_id=camera_id, via_relay=via_relay)
+    except ValueError as ve:
+        # Nothing changed end-to-end — make sure no stale relay flag lingers.
+        _store_via_relay(camera_id, False)
+        return jsonify({"error": f"Invalid RTSP URL: {ve}"}), 400
+    _store_via_relay(camera_id, via_relay)
     write_mediamtx_yaml_entry(camera_id, src)
     restart_mediamtx()
+    _set_camera_state(camera_id, "CONNECTING", "activated — probing source")
+    threading.Thread(
+        target=_probe_and_store,
+        args=(camera_id, effective_source_url(rtsp_url, via_relay, camera_id)),
+        daemon=True,
+    ).start()
 
     with WORKERS_LOCK:
         worker = CAMERA_WORKERS.get(camera_id)
@@ -2918,6 +3550,40 @@ def activate_camera():
 
     log.info("[Camera] Activated camera '%s' (mediamtx + worker up).", camera_id)
     return jsonify({"success": True, "camera_id": camera_id})
+
+
+@app.route("/api/cameras/test", methods=["POST"])
+@require_api_key
+def test_camera_connection():
+    """Probe an RTSP URL WITHOUT saving anything. Used by the UI's
+    'Test Connection' button so bad credentials are caught before a
+    camera is created or edited. Body: {rtsp_url, rtsp_password?}."""
+    data = request.json or {}
+    rtsp_url = data.get("rtsp_url")
+    if not rtsp_url:
+        return jsonify({"error": "Missing rtsp_url"}), 400
+    try:
+        canonical = canonicalize_rtsp_url(str(rtsp_url), password_override=data.get("rtsp_password") or None)
+    except ValueError as ve:
+        return jsonify({"state": "INVALID", "detail": str(ve)}), 400
+
+    # When testing through the relay we must REGISTER first — go2rtc pulls
+    # upstream on demand, so a probe against the relay path triggers the pull.
+    via_relay = _via_relay_flag(data.get("via_relay"))
+    probe_url = canonical
+    if via_relay:
+        if not relay_configured():
+            return jsonify({"state": "INVALID", "detail": "Relay server not configured in Backend/.env"}), 400
+        if not register_relay_stream("relay-test", canonical):
+            return jsonify({"state": "OFFLINE", "detail": "Relay server unreachable or refused registration"}), 200
+        probe_url = f"{Config.RTSP_RELAY_RTSP_URL}/relay-test"
+
+    result = probe_camera_state("test", probe_url)
+    result["masked_url"] = _mask_url(canonical)
+    if via_relay:
+        result["via_relay"] = True
+        delete_relay_stream("relay-test")
+    return jsonify(result)
 
 
 @app.route("/api/cameras/<camera_id>/screen_zones", methods=["GET"])
@@ -3629,7 +4295,10 @@ async def start_server_async():
 def start_ws_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(start_server_async())
+    try:
+        loop.run_until_complete(start_server_async())
+    except Exception as e:
+        log.error("[WS] WebSocket server on port %s failed: %s", Config.WS_PORT, e)
 
 threading.Thread(target=start_ws_server, daemon=True).start()
 threading.Thread(target=_webhook_loop, daemon=True, name="webhook-dispatcher").start()
@@ -3637,6 +4306,7 @@ threading.Thread(target=_webhook_loop, daemon=True, name="webhook-dispatcher").s
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
+    threading.Thread(target=camera_health_monitor, daemon=True, name="camera-health").start()
     snapshot = get_cache_snapshot()
     log.info("Starting Flask server on port %d...", port)
     log.info("Active model: %s | MATCH_THRESHOLD: %s | MATCH_MARGIN: %s | Cached faces: %d | Auth: %s",

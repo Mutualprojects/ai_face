@@ -12,12 +12,12 @@ export default function GalleryPanel({ faces, onDelete }: Props) {
     icon:   { width:28, height:28, borderRadius:8, background:"#ec489915",
                display:"flex", alignItems:"center", justifyContent:"center" },
     grid:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxHeight:320, overflowY:"auto", paddingRight:4 },
-    card:   { background:"#f9fafb", border:"1px solid #e5e7eb",
+    card:   { background:"var(--bg-input)", border:"1px solid var(--border-strong)",
                borderRadius:12, padding:"10px", display:"flex", flexDirection:"column", gap:8,
                alignItems:"center", position:"relative", transition:"border-color 0.2s" },
     avatar: { width:56, height:56, borderRadius:10, objectFit:"cover" as const,
                border:"2px solid #10b981" },
-    name:   { fontSize:11.5, fontWeight:700, color:"#111827", textAlign:"center" as const,
+    name:   { fontSize:11.5, fontWeight:700, color:"var(--text-primary)", textAlign:"center" as const,
                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" as const, width:"100%" },
     del:    { position:"absolute" as const, top:6, right:6, background:"#ef444415",
                border:"1px solid #ef444430", borderRadius:6, color:"#ef4444",
@@ -36,7 +36,7 @@ export default function GalleryPanel({ faces, onDelete }: Props) {
             <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
           </svg>
         </div>
-        <span style={{ fontWeight:700, fontSize:13, color:"#111827" }}>
+        <span style={{ fontWeight:700, fontSize:13, color:"var(--text-primary)" }}>
           Enrolled Profiles
         </span>
         <span style={{ marginLeft:"auto", fontSize:11, background:"#6366f115",

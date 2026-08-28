@@ -230,7 +230,7 @@ export default function FacesPage() {
       : cameras.find((c) => c.id === cameraFilter)?.name || "Camera";
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1100, margin: "0 auto", fontFamily: "inherit" }}>
+    <div style={{ padding: "24px 20px", maxWidth: 1100, margin: "0 auto", fontFamily: "inherit" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 22 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -243,10 +243,10 @@ export default function FacesPage() {
             <ShieldCheck size={22} color="#fff" />
           </div>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em", margin: 0 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em", margin: 0 }}>
               Recognition Control
             </h1>
-            <p style={{ fontSize: 12.5, color: "#6b7280", margin: "3px 0 0" }}>
+            <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "3px 0 0" }}>
               Only <strong style={{ color: "#059669" }}>Active</strong> faces are matched on camera. Inactive faces show as Unknown.
             </p>
           </div>
@@ -258,7 +258,7 @@ export default function FacesPage() {
           style={{
             display: "flex", alignItems: "center", gap: 7,
             padding: "9px 16px", borderRadius: 10,
-            background: "#fff", border: "1px solid #e5e7eb", color: "#374151",
+            background: "var(--bg-panel)", border: "1px solid var(--border-strong)", color: "var(--text-secondary)",
             fontSize: 12.5, fontWeight: 600, cursor: "pointer",
             boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
           }}
@@ -270,14 +270,14 @@ export default function FacesPage() {
 
       {/* Stats */}
       <div style={{
-        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 22,
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 22,
       }}>
         {stats.map((s) => (
           <div key={s.label} style={{
-            background: "#fff", border: "1px solid #eef0f6", borderRadius: 12, padding: "14px 16px",
+            background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
           }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", fontWeight: 700 }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 700 }}>
               {s.label}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: s.color, marginTop: 2, letterSpacing: "-0.03em" }}>
@@ -292,21 +292,21 @@ export default function FacesPage() {
         {/* Search */}
         <div style={{
           flex: 1, minWidth: 220, display: "flex", alignItems: "center", gap: 9,
-          background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
+          background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 10,
           padding: "9px 12px",
         }}>
-          <Search size={14} color="#9ca3af" />
+          <Search size={14} color="var(--text-muted)" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name or department..."
-            style={{ flex: 1, border: "none", outline: "none", fontSize: 13, color: "#111827", background: "transparent" }}
+            style={{ flex: 1, border: "none", outline: "none", fontSize: 13, color: "var(--text-primary)", background: "transparent" }}
           />
         </div>
 
         {/* Status / Kind filter */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#f3f4f6", borderRadius: 10, padding: 4 }}>
-          <Filter size={13} color="#9ca3af" style={{ margin: "0 4px 0 6px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "var(--bg-hover)", borderRadius: 10, padding: 4 }}>
+          <Filter size={13} color="var(--text-muted)" style={{ margin: "0 4px 0 6px" }} />
           {(["all", "active", "inactive", "employee", "visitor"] as const).map((opt) => (
             <button
               key={opt}
@@ -315,8 +315,8 @@ export default function FacesPage() {
               style={{
                 padding: "6px 12px", borderRadius: 7, border: "none", cursor: "pointer",
                 fontSize: 12, fontWeight: 600,
-                background: filter === opt ? "#fff" : "transparent",
-                color: filter === opt ? "#111827" : "#6b7280",
+                background: filter === opt ? "var(--bg-panel)" : "transparent",
+                color: filter === opt ? "var(--text-primary)" : "var(--text-muted)",
                 boxShadow: filter === opt ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
               }}
             >
@@ -333,9 +333,9 @@ export default function FacesPage() {
             style={{
               display: "flex", alignItems: "center", gap: 7,
               padding: "9px 14px", borderRadius: 10,
-              background: cameraFilter !== "all" ? "rgba(99,102,241,0.08)" : "#fff",
-              border: cameraFilter !== "all" ? "1px solid rgba(99,102,241,0.35)" : "1px solid #e5e7eb",
-              color: cameraFilter !== "all" ? "#4f46e5" : "#374151",
+              background: cameraFilter !== "all" ? "rgba(99,102,241,0.08)" : "var(--bg-panel)",
+              border: cameraFilter !== "all" ? "1px solid rgba(99,102,241,0.35)" : "1px solid var(--border-strong)",
+              color: cameraFilter !== "all" ? "#4f46e5" : "var(--text-secondary)",
               fontSize: 12.5, fontWeight: 600, cursor: "pointer",
               boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
               whiteSpace: "nowrap",
@@ -348,7 +348,7 @@ export default function FacesPage() {
           {showCameraFilter && (
             <div style={{
               position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
-              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 12,
               boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 210, overflow: "hidden",
             }}>
               {[{ id: "all", name: "All Cameras", location: null }, ...cameras].map((cam) => (
@@ -360,16 +360,16 @@ export default function FacesPage() {
                     width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 9,
                     padding: "9px 14px", border: "none", cursor: "pointer",
                     background: cameraFilter === cam.id ? "rgba(99,102,241,0.06)" : "transparent",
-                    color: cameraFilter === cam.id ? "#4f46e5" : "#374151",
+                    color: cameraFilter === cam.id ? "#4f46e5" : "var(--text-secondary)",
                     fontSize: 12.5, fontWeight: cameraFilter === cam.id ? 700 : 500,
-                    borderBottom: "1px solid #f3f4f6",
+                    borderBottom: "1px solid var(--border)",
                   }}
                 >
-                  <Camera size={12} color={cameraFilter === cam.id ? "#4f46e5" : "#9ca3af"} />
+                  <Camera size={12} color={cameraFilter === cam.id ? "#4f46e5" : "var(--text-muted)"} />
                   <div>
                     <div>{cam.name}</div>
                     {cam.location && (
-                      <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 1 }}>{cam.location}</div>
+                      <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 1 }}>{cam.location}</div>
                     )}
                   </div>
                 </button>
@@ -392,7 +392,7 @@ export default function FacesPage() {
           <button
             type="button"
             onClick={() => setCameraFilter("all")}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 0, marginLeft: 2, fontSize: 13 }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 0, marginLeft: 2, fontSize: 13 }}
           >
             ✕
           </button>
@@ -401,23 +401,23 @@ export default function FacesPage() {
 
       {/* Error */}
       {error && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: 10, padding: "12px 16px", fontSize: 13, marginBottom: 16 }}>
+        <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", borderRadius: 10, padding: "12px 16px", fontSize: 13, marginBottom: 16 }}>
           {error}
         </div>
       )}
 
       {/* List */}
       {loading && faces.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: "#9ca3af", fontSize: 13 }}>
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)", fontSize: 13 }}>
           <Loader2 size={26} style={{ animation: "spin 1s linear infinite", margin: "0 auto 10px" }} />
           Loading faces…
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: "#9ca3af", fontSize: 13 }}>
+        <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)", fontSize: 13 }}>
           No faces match.
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: 12 }}>
           {filtered.map((face) => {
             const active = face.isActive;
             const st = active ? STATUS.active : STATUS.inactive;
@@ -425,7 +425,7 @@ export default function FacesPage() {
             const hasCamera = !!face.lastCamera;
             return (
               <div key={face.key} style={{
-                background: "#fff", border: "1px solid #eef0f6", borderRadius: 14,
+                background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: 14,
                 padding: 16, display: "flex", flexDirection: "column", gap: 11,
                 boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
                 transition: "box-shadow 0.2s ease",
@@ -438,7 +438,7 @@ export default function FacesPage() {
                       src={face.photo}
                       alt={face.name}
                       width={52} height={52}
-                      style={{ borderRadius: 12, objectFit: "cover", flexShrink: 0, border: "1px solid #eef0f6" }}
+                      style={{ borderRadius: 12, objectFit: "cover", flexShrink: 0, border: "1px solid var(--border)" }}
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                     />
                   ) : (
@@ -456,7 +456,7 @@ export default function FacesPage() {
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {face.name}
                       </span>
                       <span style={{
@@ -468,7 +468,7 @@ export default function FacesPage() {
                         {face.badge}
                       </span>
                     </div>
-                    <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {face.sub}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5 }}>
@@ -502,20 +502,20 @@ export default function FacesPage() {
                   borderRadius: 10,
                   background: hasCamera
                     ? active ? "rgba(5,150,105,0.05)" : "rgba(220,38,38,0.04)"
-                    : "#f9fafb",
-                  border: `1px solid ${hasCamera ? (active ? "rgba(5,150,105,0.2)" : "rgba(220,38,38,0.15)") : "#f3f4f6"}`,
+                    : "var(--bg-input)",
+                  border: `1px solid ${hasCamera ? (active ? "rgba(5,150,105,0.2)" : "rgba(220,38,38,0.15)") : "var(--border)"}`,
                   padding: "9px 12px",
                   display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                     <Camera size={13} color={hasCamera ? (active ? "#059669" : "#dc2626") : "#d1d5db"} style={{ flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                         {active ? "Recognised on" : "Last seen on"}
                       </div>
                       <div style={{
                         fontSize: 12, fontWeight: 700,
-                        color: hasCamera ? "#374151" : "#d1d5db",
+                        color: hasCamera ? "var(--text-secondary)" : "var(--text-muted)",
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                         maxWidth: 160,
                       }}>
@@ -524,8 +524,8 @@ export default function FacesPage() {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-                    <Clock size={12} color="#9ca3af" />
-                    <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>
+                    <Clock size={12} color="var(--text-muted)" />
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>
                       {timeAgo(face.lastSeenAt)}
                     </span>
                   </div>
@@ -534,7 +534,7 @@ export default function FacesPage() {
                 {/* Multi-camera chips */}
                 {face.seenCameras.length > 1 && (
                   <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                       Also on:
                     </span>
                     {face.seenCameras
@@ -550,7 +550,7 @@ export default function FacesPage() {
                         </span>
                       ))}
                     {face.seenCameras.length > 4 && (
-                      <span style={{ fontSize: 10.5, color: "#9ca3af" }}>+{face.seenCameras.length - 4} more</span>
+                      <span style={{ fontSize: 10.5, color: "var(--text-muted)" }}>+{face.seenCameras.length - 4} more</span>
                     )}
                   </div>
                 )}

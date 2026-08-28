@@ -209,6 +209,23 @@ const NAV_ITEMS = [
     activeColor: "#8b5cf6",
     activeBg: "rgba(139,92,246,0.08)",
   },
+  {
+    label: "User Mgmt",
+    id: "users",
+    href: "/users",
+    shortcut: "U",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #f43f5e, #e11d48)",
+    activeColor: "#f43f5e",
+    activeBg: "rgba(244,63,94,0.08)",
+  },
 ];
 
 interface SidebarProps {
@@ -233,6 +250,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
   else if (pathname === "/cameras") activeId = "cameras";
   else if (pathname === "/analytics") activeId = "analytics";
   else if (pathname === "/sdk") activeId = "manage-sdk";
+  else if (pathname === "/users") activeId = "users";
   else if (pathname === "/public-api") activeId = "public-api";
   else if (pathname === "/") activeId = searchParams.get("tab") || "register";
 
@@ -273,12 +291,12 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
           transition: all 0.18s ease;
         }
         .sidebar-nav-item:hover {
-          background: #eef0f6 !important;
+          background: var(--bg-hover) !important;
           transform: translateX(2px);
         }
         .sidebar-search:focus-within {
-          border-color: #6366f1 !important;
-          box-shadow: 0 0 0 3px rgba(99,102,241,0.08) !important;
+          border-color: var(--violet) !important;
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.15) !important;
         }
         @keyframes slideInLeft {
           from { opacity: 0; transform: translateX(-8px); }
@@ -299,9 +317,9 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
           z-index: 50;
           display: flex;
           flex-direction: column;
-          background: #ffffff;
-          border-right: 1px solid #e5e7eb;
-          box-shadow: 1px 0 8px rgba(0,0,0,0.03);
+          background: var(--bg-sidebar);
+          border-right: 1px solid var(--border);
+          box-shadow: var(--shadow-md);
           transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -317,7 +335,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
         @media (max-width: 1024px) {
           .responsive-sidebar {
             transform: ${isOpen ? "translateX(0)" : "translateX(-100%)"};
-            box-shadow: ${isOpen ? "4px 0 25px rgba(0,0,0,0.15)" : "none"};
+            box-shadow: ${isOpen ? "var(--shadow-lg)" : "none"};
           }
           .responsive-sidebar,
           .responsive-sidebar.snt-rail {
@@ -364,7 +382,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                   fontSize: 17,
                   letterSpacing: "-0.03em",
                   lineHeight: 1.1,
-                  color: "#111827",
+                  color: "var(--text-primary)",
                 }}>
                   Sentinel <span style={{
                     background: "linear-gradient(90deg, #6366f1, #8b5cf6, #06b6d4, #6366f1)",
@@ -380,7 +398,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                   letterSpacing: "0.12em",
                   textTransform: "uppercase" as const,
                   marginTop: 3,
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   fontWeight: 600,
                 }}>
                   Facial Intelligence
@@ -396,9 +414,9 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 className="snt-collapse-btn"
                 style={{
-                  background: "#f3f4f6", border: "none",
+                  background: "var(--bg-hover)", border: "none",
                   borderRadius: 8, padding: 6,
-                  color: "#6b7280", cursor: "pointer",
+                  color: "var(--text-muted)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   transition: "all 0.2s ease"
                 }}
@@ -423,9 +441,9 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                 aria-label="Close menu"
                 className="mobile-close-btn"
                 style={{
-                  background: "#f3f4f6", border: "none",
+                  background: "var(--bg-hover)", border: "none",
                   borderRadius: 8, padding: 6,
-                  color: "#6b7280", cursor: "pointer",
+                  color: "var(--text-muted)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
@@ -440,7 +458,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
           <div className="snt-hide-rail" style={{
             marginTop: 18,
             height: 1,
-            background: "#e5e7eb",
+            background: "var(--border)",
           }} />
         </div>
 
@@ -448,14 +466,14 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
         <div className="snt-hide-rail" style={{ padding: "0 14px 14px" }}>
           <div className="sidebar-search" style={{
             display: "flex", alignItems: "center", gap: 10,
-            background: "#f9fafb",
-            border: "1px solid #e5e7eb",
+            background: "var(--bg-input)",
+            border: "1px solid var(--border-strong)",
             borderRadius: 10,
             padding: "9px 12px",
             transition: "all 0.2s ease",
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="#9ca3af" strokeWidth="2.5"
+              stroke="var(--text-muted)" strokeWidth="2.5"
               strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/>
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -466,17 +484,17 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
               placeholder="Quick search..."
               style={{
                 background: "none", border: "none", outline: "none",
-                color: "#111827", fontSize: 12.5,
+                color: "var(--text-primary)", fontSize: 12.5,
                 width: "100%", fontFamily: "inherit",
-                caretColor: "#6366f1",
+                caretColor: "var(--violet)",
               }}
             />
             <span style={{
-              fontSize: 9, color: "#9ca3af",
-              border: "1px solid #e5e7eb",
+              fontSize: 9, color: "var(--text-muted)",
+              border: "1px solid var(--border-strong)",
               borderRadius: 5, padding: "2px 6px", flexShrink: 0,
               fontFamily: "'JetBrains Mono', monospace",
-              background: "#f3f4f6",
+              background: "var(--bg-hover)",
             }}>⌘K</span>
           </div>
         </div>
@@ -487,7 +505,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
           fontSize: 9,
           letterSpacing: "0.14em",
           textTransform: "uppercase" as const,
-          color: "#9ca3af",
+          color: "var(--text-muted)",
           fontWeight: 700,
         }}>
           Navigation
@@ -514,7 +532,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                   padding: "10px 12px",
                   borderRadius: 10,
                   marginBottom: 2,
-                  color: active ? item.activeColor : "#374151",
+                  color: active ? item.activeColor : "var(--text-secondary)",
                   background: active ? item.activeBg : "transparent",
                   textDecoration: "none",
                   fontSize: 13.5,
@@ -548,11 +566,11 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                   alignItems: "center",
                   justifyContent: "center",
                   flexShrink: 0,
-                  background: active ? item.gradient : hovered ? "#f3f4f6" : "#f9fafb",
-                  color: active ? "#fff" : "#6b7280",
+                  background: active ? item.gradient : hovered ? "var(--bg-hover)" : "var(--bg-input)",
+                  color: active ? "#fff" : "var(--text-muted)",
                   boxShadow: active ? `0 3px 10px ${item.activeColor}33` : "none",
                   transition: "all 0.2s ease",
-                  border: active ? "none" : "1px solid #f3f4f6",
+                  border: active ? "none" : "1px solid var(--border-light)",
                 }}>
                   {item.icon}
                 </span>
@@ -580,11 +598,11 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                 {/* Shortcut key hint (on hover) */}
                 {hovered && !active && (
                   <span className="snt-hide-rail" style={{
-                    fontSize: 9, color: "#9ca3af",
-                    border: "1px solid #e5e7eb",
+                    fontSize: 9, color: "var(--text-muted)",
+                    border: "1px solid var(--border-strong)",
                     borderRadius: 4, padding: "1px 5px",
                     fontFamily: "'JetBrains Mono', monospace",
-                    background: "#f9fafb",
+                    background: "var(--bg-input)",
                   }}>{item.shortcut}</span>
                 )}
               </Link>
@@ -595,36 +613,36 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
         {/* ── DB Size Widget ── */}
         <div className="snt-hide-rail" style={{ padding: "10px 14px 0" }}>
           <div style={{
-            background: "linear-gradient(135deg, #f5f3ff, #ede9fe)",
-            border: "1px solid #ddd6fe",
+            background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.08))",
+            border: "1px solid rgba(99,102,241,0.2)",
             borderRadius: 12, padding: "10px 12px",
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <div style={{ fontSize: 9, color: "#7c3aed", letterSpacing: "0.12em", textTransform: "uppercase" as const, fontWeight: 700 }}>Database</div>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <div style={{ fontSize: 9, color: "#818cf8", letterSpacing: "0.12em", textTransform: "uppercase" as const, fontWeight: 700 }}>Database</div>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
               </svg>
             </div>
             {dbStats ? (
               <>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "#4c1d95", letterSpacing: "-0.04em", lineHeight: 1 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#a5b4fc", letterSpacing: "-0.04em", lineHeight: 1 }}>
                   {dbStats.sizeMB < 1024 ? `${dbStats.sizeMB.toFixed(1)} MB` : `${(dbStats.sizeMB / 1024).toFixed(2)} GB`}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
                   {[
-                    { label: "Faces", value: dbStats.faces, color: "#7c3aed" },
+                    { label: "Faces", value: dbStats.faces, color: "#818cf8" },
                     { label: "Logs", value: dbStats.logs, color: "#6366f1" },
-                    { label: "Cams", value: dbStats.cameras, color: "#2563eb" },
+                    { label: "Cams", value: dbStats.cameras, color: "#38bdf8" },
                   ].map(s => (
-                    <div key={s.label} style={{ background: "rgba(255,255,255,0.6)", borderRadius: 7, padding: "5px 6px", textAlign: "center" as const }}>
+                    <div key={s.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 7, padding: "5px 6px", textAlign: "center" as const }}>
                       <div style={{ fontSize: 11, fontWeight: 800, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: 8.5, color: "#7c3aed", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>{s.label}</div>
+                      <div style={{ fontSize: 8.5, color: "#818cf8", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>{s.label}</div>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: 12, color: "#7c3aed", opacity: 0.6 }}>Loading...</div>
+              <div style={{ fontSize: 12, color: "#818cf8", opacity: 0.6 }}>Loading...</div>
             )}
           </div>
         </div>
@@ -632,7 +650,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
         {/* ── Footer ── */}
         <div className="snt-hide-rail" style={{
           padding: "14px 14px 18px",
-          borderTop: "1px solid #f3f4f6",
+          borderTop: "1px solid var(--border)",
           marginTop: 12,
         }}>
           {/* User row */}
@@ -640,8 +658,8 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
             display: "flex", alignItems: "center", gap: 10,
             padding: "10px 12px",
             borderRadius: 12,
-            background: "#f9fafb",
-            border: "1px solid #e5e7eb",
+            background: "var(--bg-input)",
+            border: "1px solid var(--border)",
             cursor: "pointer",
             transition: "all 0.2s ease",
           }}>
@@ -656,20 +674,20 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
-                fontSize: 12.5, fontWeight: 700, color: "#111827",
+                fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)",
                 lineHeight: 1.2, letterSpacing: "-0.02em",
               }}>
                 Admin
               </div>
               <div style={{
-                fontSize: 10, color: "#6b7280",
+                fontSize: 10, color: "var(--text-muted)",
                 marginTop: 2,
                 display: "flex", alignItems: "center", gap: 5,
               }}>
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%",
-                  background: "#10b981",
-                  boxShadow: "0 0 4px #10b981",
+                  background: "var(--green)",
+                  boxShadow: "0 0 6px var(--green)",
                   flexShrink: 0, display: "inline-block",
                   animation: "statusBreathe 2s ease-in-out infinite",
                 }} />
@@ -679,7 +697,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
 
             {/* Settings dots */}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
+              stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
             </svg>
           </div>
@@ -687,7 +705,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
           {/* Version tag */}
           <div style={{
             marginTop: 10, textAlign: "center" as const,
-            fontSize: 9, color: "#d1d5db",
+            fontSize: 9, color: "var(--text-faint)",
             fontFamily: "'JetBrains Mono', monospace",
             letterSpacing: "0.08em",
           }}>

@@ -58,11 +58,11 @@ function BarChart({ data, color1 = "#6366f1", color2 = "#f59e0b" }: {
               <div style={{
                 width: "100%", height: `${pct * 60}px`,
                 borderRadius: "3px 3px 0 0",
-                background: total > 0 ? `linear-gradient(to top, ${color2}, ${color1})` : "#e5e7eb",
+                background: total > 0 ? `linear-gradient(to top, ${color2}, ${color1})` : "var(--border-strong)",
                 transition: "height 0.5s ease", minHeight: total > 0 ? 4 : 2,
               }} />
             </div>
-            {(i % 4 === 0) && <div style={{ fontSize: 8, color: "#9ca3af", whiteSpace: "nowrap", marginTop: 2 }}>{d.hour}</div>}
+            {(i % 4 === 0) && <div style={{ fontSize: 8, color: "var(--text-muted)", whiteSpace: "nowrap", marginTop: 2 }}>{d.hour}</div>}
           </div>
         );
       })}
@@ -77,15 +77,15 @@ function Donut({ pct, color, label, size = 80 }: { pct: number; color: string; l
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={7} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border-strong)" strokeWidth={7} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={7}
           strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4}
           strokeLinecap="round" style={{ transition: "stroke-dasharray 0.8s ease" }} />
-        <text x={size / 2} y={size / 2 + 5} textAnchor="middle" fontSize={13} fontWeight={800} fill="#111827">
+        <text x={size / 2} y={size / 2 + 5} textAnchor="middle" fontSize={13} fontWeight={800} fill="var(--text-primary)">
           {Math.round(pct)}%
         </text>
       </svg>
-      <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>{label}</div>
     </div>
   );
 }
@@ -108,16 +108,16 @@ function StatCard({ label, value, sub, color, icon, trend }: {
 }) {
   return (
     <div style={{
-      background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16,
+      background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16,
       padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10,
       boxShadow: "0 1px 4px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden",
     }}>
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: color, borderRadius: "16px 16px 0 0" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "#111827", letterSpacing: "-0.04em", marginTop: 4 }}>{value}</div>
-          {sub && <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>{sub}</div>}
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: "var(--text-primary)", letterSpacing: "-0.04em", marginTop: 4 }}>{value}</div>
+          {sub && <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{sub}</div>}
         </div>
         <div style={{ width: 42, height: 42, borderRadius: 12, background: color + "18", display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>{icon}</div>
       </div>
@@ -129,8 +129,8 @@ function StatCard({ label, value, sub, color, icon, trend }: {
 function SH({ title, sub }: { title: string; sub?: string }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em" }}>{title}</div>
-      {sub && <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{sub}</div>}
+      <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{title}</div>
+      {sub && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -212,8 +212,8 @@ export default function AnalyticsPage() {
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 16 }}>
-      <div style={{ width: 44, height: 44, borderRadius: "50%", border: "3px solid #e5e7eb", borderTop: `3px solid ${C.purple}`, animation: "spin 0.8s linear infinite" }} />
-      <div style={{ fontSize: 13, color: "#9ca3af" }}>Loading analytics...</div>
+      <div style={{ width: 44, height: 44, borderRadius: "50%", border: "3px solid var(--border-strong)", borderTop: `3px solid ${C.purple}`, animation: "spin 0.8s linear infinite" }} />
+      <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading analytics...</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -224,16 +224,16 @@ export default function AnalyticsPage() {
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         .ac{animation:fu .3s ease both}
-        .ar:hover{background:#f9fafb!important}
+        .ar:hover{background:var(--bg-hover)!important}
       `}</style>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#111827", letterSpacing: "-0.04em" }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)", letterSpacing: "-0.04em" }}>
             Analytics <span style={{ background: "linear-gradient(90deg,#6366f1,#8b5cf6,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Dashboard</span>
           </div>
-          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
             Last updated {relTime(lastRefresh.toISOString())} · auto-refresh every 15s
           </div>
         </div>
@@ -245,17 +245,17 @@ export default function AnalyticsPage() {
 
       {/* Health banner */}
       {health && (
-        <div style={{ background: "linear-gradient(135deg,#f0fdf4,#ecfdf5)", border: "1px solid #bbf7d0", borderRadius: 14, padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+        <div style={{ background: "linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.05))", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 14, padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
           <span style={{ width: 10, height: 10, borderRadius: "50%", background: C.green, display: "inline-block", boxShadow: `0 0 6px ${C.green}` }} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#065f46" }}>System Healthy</span>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>·</span>
-          <span style={{ fontSize: 12, color: "#374151" }}>Model: <b>{health.active_model}</b></span>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>·</span>
-          <span style={{ fontSize: 12, color: "#374151" }}>Cached Faces: <b>{health.cached_faces}</b></span>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>·</span>
-          <span style={{ fontSize: 12, color: "#374151" }}>Workers: <b>{(health.active_workers || []).length}</b></span>
-          <span style={{ fontSize: 12, color: "#6b7280" }}>·</span>
-          <span style={{ fontSize: 12, color: "#374151" }}>Threshold: <b>{health.match_threshold}</b></span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>System Healthy</span>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>·</span>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Model: <b>{health.active_model}</b></span>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>·</span>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Cached Faces: <b>{health.cached_faces}</b></span>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>·</span>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Workers: <b>{(health.active_workers || []).length}</b></span>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>·</span>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Threshold: <b>{health.match_threshold}</b></span>
         </div>
       )}
 
@@ -276,19 +276,19 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Bar chart + Donut */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, marginBottom: 28 }}>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+      <div className="snt-resp-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, marginBottom: 28 }}>
+        <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           <SH title="Detections — Last 24 Hours" sub="Hourly breakdown" />
           <BarChart data={hourBuckets} color1={C.purple} color2={C.amber} />
           <div style={{ display: "flex", gap: 16, marginTop: 12, justifyContent: "flex-end" }}>
             {[{ c: C.purple, l: "Known" }, { c: C.amber, l: "Unknown" }].map(({ c, l }) => (
-              <div key={l} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#6b7280" }}>
+              <div key={l} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
                 <span style={{ width: 10, height: 10, borderRadius: 3, background: c, display: "inline-block" }} />{l}
               </div>
             ))}
           </div>
         </div>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", gap: 20 }}>
           <SH title="Recognition Rates" />
           <div style={{ display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: 16 }}>
             <Donut pct={matchRate} color={C.green} label="Match Rate" />
@@ -299,34 +299,34 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Camera + Person rankings */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+      <div className="snt-resp-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
+        <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           <SH title="Camera Activity" sub="Detections per camera" />
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {camList.length === 0 && <div style={{ fontSize: 13, color: "#9ca3af", textAlign: "center", padding: 20 }}>No data</div>}
+            {camList.length === 0 && <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 20 }}>No data</div>}
             {camList.map(([id, st], i) => {
               const pct = (st.count / (camList[0]?.[1].count || 1)) * 100;
               const col = `hsl(${(i * 47) % 360},65%,52%)`;
               return (
                 <div key={id} className="ar" style={{ borderRadius: 10, padding: "8px 10px", transition: "background .15s" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.name}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.name}</div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: col, marginLeft: 8 }}>{st.count}</div>
                   </div>
-                  <div style={{ height: 5, background: "#f3f4f6", borderRadius: 99 }}>
+                  <div style={{ height: 5, background: "var(--bg-hover)", borderRadius: 99 }}>
                     <div style={{ height: "100%", width: `${pct}%`, background: col, borderRadius: 99, transition: "width .8s ease" }} />
                   </div>
-                  <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 3 }}>{relTime(st.lastSeen)}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3 }}>{relTime(st.lastSeen)}</div>
                 </div>
               );
             })}
           </div>
         </div>
 
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           <SH title="Most Detected Persons" sub="Ranked by total detections" />
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {personList.length === 0 && <div style={{ fontSize: 13, color: "#9ca3af", textAlign: "center", padding: 20 }}>No known persons detected</div>}
+            {personList.length === 0 && <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 20 }}>No known persons detected</div>}
             {personList.map((p, i) => {
               const pct = (p.count / (personList[0]?.count || 1)) * 100;
               const col = HUE_LIST[i % HUE_LIST.length];
@@ -336,10 +336,10 @@ export default function AnalyticsPage() {
                   <div style={{ width: 30, height: 30, borderRadius: 8, background: col + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: col, flexShrink: 0 }}>{initials}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
                       <div style={{ fontSize: 12, fontWeight: 800, color: col, marginLeft: 8 }}>{p.count}×</div>
                     </div>
-                    <div style={{ height: 4, background: "#f3f4f6", borderRadius: 99 }}>
+                    <div style={{ height: 4, background: "var(--bg-hover)", borderRadius: 99 }}>
                       <div style={{ height: "100%", width: `${pct}%`, background: col, borderRadius: 99, transition: "width .8s ease" }} />
                     </div>
                   </div>
@@ -351,20 +351,20 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Dept + DB */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+      <div className="snt-resp-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
+        <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           <SH title="Department Breakdown" sub="Registered employees" />
-          {deptList.length === 0 ? <div style={{ fontSize: 13, color: "#9ca3af", textAlign: "center", padding: 20 }}>No data</div> : (
+          {deptList.length === 0 ? <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 20 }}>No data</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {deptList.map(([dept, cnt], i) => {
                 const col = HUE_LIST[i % HUE_LIST.length];
                 return (
                   <div key={dept}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 12.5, color: "#374151", fontWeight: 600 }}>{dept}</span>
+                      <span style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 600 }}>{dept}</span>
                       <span style={{ fontSize: 12, fontWeight: 800, color: col }}>{cnt} people</span>
                     </div>
-                    <div style={{ height: 8, background: "#f3f4f6", borderRadius: 99 }}>
+                    <div style={{ height: 8, background: "var(--bg-hover)", borderRadius: 99 }}>
                       <div style={{ height: "100%", width: `${(cnt / (deptList[0]?.[1] || 1)) * 100}%`, background: col, borderRadius: 99, transition: "width .8s ease" }} />
                     </div>
                   </div>
@@ -374,7 +374,7 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
           <SH title="Database Storage" sub="Estimated usage" />
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {[
@@ -387,57 +387,57 @@ export default function AnalyticsPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 15 }}>{icon}</span>
                     <div>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{label}</div>
-                      <div style={{ fontSize: 10, color: "#9ca3af" }}>{note}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)" }}>{label}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{note}</div>
                     </div>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 800, color, flexShrink: 0 }}>{fmtBytes(size * 1024 * 1024)}</div>
                 </div>
-                <div style={{ height: 8, background: "#f3f4f6", borderRadius: 99 }}>
+                <div style={{ height: 8, background: "var(--bg-hover)", borderRadius: 99 }}>
                   <div style={{ height: "100%", width: `${(size / totalMB) * 100}%`, background: color, borderRadius: 99, transition: "width .8s ease" }} />
                 </div>
               </div>
             ))}
-            <div style={{ borderTop: "1px dashed #e5e7eb", paddingTop: 12, display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: "#374151" }}>Total Estimated</span>
-              <span style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>{fmtBytes(totalMB * 1024 * 1024)}</span>
+            <div style={{ borderTop: "1px dashed var(--border-strong)", paddingTop: 12, display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-secondary)" }}>Total Estimated</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: "var(--text-primary)" }}>{fmtBytes(totalMB * 1024 * 1024)}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Camera grid */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", marginBottom: 28 }}>
+      <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", marginBottom: 28 }}>
         <SH title="Active Cameras" sub={`${camCount} registered · ${(health?.active_workers || []).length} workers running`} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
           {cameras.map((cam: any) => {
             const isActive = (health?.active_workers || []).includes(cam.id);
             const st = camStats[cam.id];
             return (
-              <div key={cam.id} style={{ border: `1.5px solid ${isActive ? C.green + "50" : "#e5e7eb"}`, borderRadius: 12, padding: "14px 16px", background: isActive ? "#f0fdf4" : "#fafafa", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div key={cam.id} style={{ border: `1.5px solid ${isActive ? C.green + "50" : "var(--border-strong)"}`, borderRadius: 12, padding: "14px 16px", background: isActive ? "rgba(16,185,129,0.05)" : "var(--bg-hover)", display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{cam.name || cam.id}</div>
-                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.06em", background: isActive ? C.green : "#9ca3af", color: "#fff", borderRadius: 99, padding: "2px 7px" }}>{isActive ? "LIVE" : "OFF"}</span>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{cam.name || cam.id}</div>
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.06em", background: isActive ? C.green : "var(--text-muted)", color: "#fff", borderRadius: 99, padding: "2px 7px" }}>{isActive ? "LIVE" : "OFF"}</span>
                 </div>
-                {cam.location && <div style={{ fontSize: 11, color: "#6b7280" }}>📍 {cam.location}</div>}
-                {st ? <div style={{ fontSize: 11, color: "#9ca3af" }}>{st.count} detections · {relTime(st.lastSeen)}</div>
-                  : <div style={{ fontSize: 11, color: "#d1d5db" }}>No detections yet</div>}
+                {cam.location && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>📍 {cam.location}</div>}
+                {st ? <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{st.count} detections · {relTime(st.lastSeen)}</div>
+                  : <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No detections yet</div>}
               </div>
             );
           })}
-          {cameras.length === 0 && <div style={{ fontSize: 13, color: "#9ca3af", gridColumn: "1/-1", textAlign: "center", padding: 20 }}>No cameras found</div>}
+          {cameras.length === 0 && <div style={{ fontSize: 13, color: "var(--text-muted)", gridColumn: "1/-1", textAlign: "center", padding: 20 }}>No cameras found</div>}
         </div>
       </div>
 
       {/* Recent feed table */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+      <div style={{ background: "var(--bg-panel)", border: "1px solid var(--border-strong)", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
         <SH title="Recent Detection Feed" sub="Last 20 events" />
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
             <thead>
-              <tr style={{ borderBottom: "2px solid #f3f4f6" }}>
+              <tr style={{ borderBottom: "2px solid var(--border)" }}>
                 {["Person", "Camera", "Confidence", "When", "Status"].map(h => (
-                  <th key={h} style={{ textAlign: "left", padding: "6px 10px", fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                  <th key={h} style={{ textAlign: "left", padding: "6px 10px", fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -445,22 +445,22 @@ export default function AnalyticsPage() {
               {logs.slice(0, 20).map((l, i) => {
                 const isKnown = l.person_name !== "Unknown";
                 return (
-                  <tr key={i} className="ar" style={{ borderBottom: "1px solid #f9fafb", transition: "background .15s" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: isKnown ? 700 : 400, color: isKnown ? "#111827" : "#6b7280" }}>{l.person_name}</td>
-                    <td style={{ padding: "8px 10px", color: "#374151" }}>{l.camera_name || l.camera_id || "—"}</td>
+                  <tr key={i} className="ar" style={{ borderBottom: "1px solid var(--border)", transition: "background .15s" }}>
+                    <td style={{ padding: "8px 10px", fontWeight: isKnown ? 700 : 400, color: isKnown ? "var(--text-primary)" : "var(--text-muted)" }}>{l.person_name}</td>
+                    <td style={{ padding: "8px 10px", color: "var(--text-secondary)" }}>{l.camera_name || l.camera_id || "—"}</td>
                     <td style={{ padding: "8px 10px" }}>
-                      <span style={{ display: "inline-block", background: l.confidence > 0.7 ? C.green + "20" : l.confidence > 0.4 ? C.amber + "20" : "#f3f4f6", color: l.confidence > 0.7 ? C.green : l.confidence > 0.4 ? C.amber : "#9ca3af", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+                      <span style={{ display: "inline-block", background: l.confidence > 0.7 ? C.green + "20" : l.confidence > 0.4 ? C.amber + "20" : "var(--bg-hover)", color: l.confidence > 0.7 ? C.green : l.confidence > 0.4 ? C.amber : "var(--text-muted)", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
                         {fmt(l.confidence * 100, 0)}%
                       </span>
                     </td>
-                    <td style={{ padding: "8px 10px", color: "#9ca3af", whiteSpace: "nowrap" }}>{relTime(l.timestamp)}</td>
+                    <td style={{ padding: "8px 10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{relTime(l.timestamp)}</td>
                     <td style={{ padding: "8px 10px" }}>
                       <span style={{ display: "inline-block", background: isKnown ? C.green + "18" : C.amber + "18", color: isKnown ? C.green : C.amber, borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 800 }}>{isKnown ? "Known" : "Unknown"}</span>
                     </td>
                   </tr>
                 );
               })}
-              {logs.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#9ca3af", fontSize: 13 }}>No detection logs yet</td></tr>}
+              {logs.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "var(--text-muted)", fontSize: 13 }}>No detection logs yet</td></tr>}
             </tbody>
           </table>
         </div>

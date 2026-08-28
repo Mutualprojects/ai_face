@@ -22,8 +22,8 @@ PID_FILE="$LOG_DIR/pids"
 mkdir -p "$LOG_DIR"
 
 start_backend() {
-  echo "Starting Flask Backend..."
-  ( cd "$BACKEND_DIR" && venv/bin/python app.py > "$LOG_DIR/backend.log" 2>&1 ) &
+  echo "Starting Flask Backend (Gunicorn)..."
+  ( cd "$BACKEND_DIR" && venv/bin/gunicorn -c gunicorn.conf.py app:app > "$LOG_DIR/backend.log" 2>&1 ) &
   echo "backend:$!" >> "$PID_FILE"
 }
 

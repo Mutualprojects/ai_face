@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   login.module.css  —  Sentinel AI Clean White Split Login Page
-   Clean White UI · Split Screen · Cybersecurity Concept Illustration
+   login.module.css  —  Sentinel AI Dark Login Page
+   Dark UI · Split Screen · Cybersecurity Concept Illustration
 ═══════════════════════════════════════════════════════════════════════════ */
 
 .root {
@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f8fafc;
+  background: var(--bg-base);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   padding: 24px;
   position: relative;
@@ -21,8 +21,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    radial-gradient(#cbd5e1 0.75px, transparent 0.75px),
-    radial-gradient(#cbd5e1 0.75px, #f8fafc 0.75px);
+    radial-gradient(var(--border-light) 0.75px, transparent 0.75px),
+    radial-gradient(var(--border-light) 0.75px, var(--bg-deep) 0.75px);
   background-size: 30px 30px;
   background-position: 0 0, 15px 15px;
   opacity: 0.6;
@@ -37,12 +37,10 @@
   width: 100%;
   max-width: 960px;
   min-height: 560px;
-  background: #ffffff;
+  background: var(--bg-panel);
   border-radius: 24px;
-  border: 1px solid #e2e8f0;
-  box-shadow:
-    0 25px 50px -12px rgba(15, 23, 42, 0.08),
-    0 0 0 1px rgba(99, 102, 241, 0.05);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
   display: grid;
   grid-template-columns: 1fr 1fr;
   overflow: hidden;
@@ -78,7 +76,7 @@
 .brandTitle {
   font-size: 20px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
   margin: 0;
 }
@@ -86,7 +84,7 @@
 .brandSubtitle {
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-muted);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -98,7 +96,7 @@
 .heading {
   font-size: 24px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
   margin: 0;
 }
@@ -125,14 +123,14 @@
 .label {
   font-size: 12.5px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-secondary);
 }
 
 .capsBadge {
   font-size: 10.5px;
   font-weight: 700;
   color: #d97706;
-  background: #fef3c7;
+  background: rgba(217,119,6,0.1);
   padding: 2px 7px;
   border-radius: 4px;
 }
@@ -146,19 +144,19 @@
 .inputIcon {
   position: absolute;
   left: 14px;
-  color: #94a3b8;
+  color: var(--text-muted);
   pointer-events: none;
 }
 
 .input {
   width: 100%;
   height: 46px;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   padding: 0 40px 0 42px;
   font-size: 14px;
-  color: #0f172a;
+  color: var(--text-primary);
   font-family: inherit;
   outline: none;
   transition: all 0.2s ease;
@@ -166,14 +164,14 @@
 }
 
 .input:focus {
-  background: #ffffff;
+  background: var(--bg-panel);
   border-color: #6366f1;
   box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.12);
 }
 
 .inputError {
   border-color: #ef4444 !important;
-  background: #fff5f5 !important;
+  background: rgba(239,68,68,0.05) !important;
 }
 
 .eyeBtn {
@@ -181,7 +179,7 @@
   right: 12px;
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -190,7 +188,7 @@
 }
 
 .eyeBtn:hover {
-  color: #475569;
+  color: var(--text-secondary);
 }
 
 .fieldErrText {
@@ -205,12 +203,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 13px;
-  color: #b91c1c;
+  color: #f87171;
 }
 
 /* Submit Button */
@@ -260,13 +258,13 @@
 
 /* Right Panel */
 .rightPanel {
-  background: #ffffff;
+  background: var(--bg-card);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px;
-  border-left: 1px solid #e2e8f0;
+  border-left: 1px solid var(--border-strong);
 }
 
 .illustrationWrap {
@@ -291,5 +289,18 @@
   }
   .rightPanel {
     display: none;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  .leftPanel {
+    padding: 32px 24px;
+  }
+  .heading {
+    font-size: 20px;
+  }
+  .card {
+    border-radius: 16px;
   }
 }

@@ -113,14 +113,14 @@ function MatchCard({ m, rank, threshold }: { m: TopMatch; rank: number; threshol
               border: `1.5px solid ${m.match ? "#10b981" : "#e5e7eb"}`
             }} />
           : <div style={{
-              width: 38, height: 38, borderRadius: 8, background: "#f3f4f6",
+              width: 38, height: 38, borderRadius: 8, background: "var(--bg-input)",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16
             }}>👤</div>
         }
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: m.match ? "#059669" : "#111827",
+          <span style={{ fontSize: 12, fontWeight: 700, color: m.match ? "#059669" : "var(--text-primary)",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginRight: 8 }}>
             {m.name}
           </span>
@@ -193,7 +193,7 @@ export default function ComparisonPanel({ unknowns, backendUrl, onRegisterClick 
 
   return (
     <div style={{
-      background: "#ffffff",
+      background: "var(--bg-card)",
       border: "1px solid rgba(239,68,68,0.25)",
       borderRadius: 16, overflow: "hidden",
       boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
@@ -255,7 +255,7 @@ export default function ComparisonPanel({ unknowns, backendUrl, onRegisterClick 
         {/* ── High-Tech Side-by-Side Verification Screen ── */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "#f9fafb", border: "1px solid #e5e7eb",
+          background: "var(--bg-input)", border: "1px solid var(--border-strong)",
           borderRadius: 14, padding: 12, position: "relative", overflow: "hidden"
         }}>
           {/* Laser scanning connector line in background */}
@@ -263,10 +263,10 @@ export default function ComparisonPanel({ unknowns, backendUrl, onRegisterClick 
 
           {/* Left: Live Crop — enlarged to 120×120 */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, zIndex: 2 }}>
-            <div style={{
+            <div className="snt-crop" style={{
               width: 120, height: 120, borderRadius: 12, overflow: "hidden",
               border: "2.5px solid #ef4444",
-              boxShadow: "0 0 16px rgba(239,68,68,0.2)", background: "#ffffff"
+              boxShadow: "0 0 16px rgba(239,68,68,0.2)", background: "var(--bg-card)"
             }}>
               {activeCrop
                 ? <img src={activeCrop} alt="Live Crop" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -294,10 +294,10 @@ export default function ComparisonPanel({ unknowns, backendUrl, onRegisterClick 
 
           {/* Right: Enrolled Match — enlarged to 120×120 */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, zIndex: 2 }}>
-            <div style={{
+            <div className="snt-crop" style={{
               width: 120, height: 120, borderRadius: 12, overflow: "hidden",
               border: `2.5px solid ${isMatch ? "#10b981" : "#e5e7eb"}`,
-              boxShadow: isMatch ? "0 0 16px rgba(16,185,129,0.25)" : "none", background: "#ffffff"
+              boxShadow: isMatch ? "0 0 16px rgba(16,185,129,0.25)" : "none", background: "var(--bg-card)"
             }}>
               {best?.photo_url
                 ? <img src={best.photo_url} alt={best.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -362,8 +362,8 @@ export default function ComparisonPanel({ unknowns, backendUrl, onRegisterClick 
             }}
             disabled={loading}
             style={{
-              flex: "0 0 auto", padding: "10px 14px", borderRadius: 10, border: "1px solid #e5e7eb",
-              cursor: "pointer", background: "#f9fafb", color: "#374151",
+              flex: "0 0 auto", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border-strong)",
+              cursor: "pointer", background: "var(--bg-input)", color: "var(--text-primary)",
               fontSize: 12, fontWeight: 700, transition: "all 0.2s"
             }}
           >

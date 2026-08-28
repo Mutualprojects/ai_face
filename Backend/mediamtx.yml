@@ -35,7 +35,7 @@ authJWTJWKS: null
 authMethod: internal
 encryption: 'no'
 hls: true
-hlsAddress: :8888
+hlsAddress: :8892
 hlsAllowOrigin: '*'
 hlsAlwaysRemux: false
 hlsDirectory: ''
@@ -140,18 +140,38 @@ pathDefaults:
 paths:
   all_others: null
   camera1:
-    runOnInit: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
-      -flags low_delay -rtsp_transport tcp -timeout 5000000 -i 'rtsp://admin:admin@172.21.2.17:554/rtsp/streaming?channel=01&subtype=0'
-      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
-      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -rtsp_transport tcp -f rtsp
-      rtsp://localhost:$RTSP_PORT/$MTX_PATH
-    runOnInitRestart: true
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c1/s0/live'
+      -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g
+      15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
     source: publisher
-  camera_ab36953f:
-    runOnDemand: ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags nobuffer+discardcorrupt
-      -flags low_delay -rtsp_transport tcp -i 'rtsp://admin:admin@172.23.0.79:554/rtsp/streaming?channel=01&subtype=0'
+  check-out:
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c04/s0/live'
       -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
-      yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+      yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  front_office:
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:admin@172.23.0.79:554/rtsp/streaming?channel=01&subtype=0'
+      -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g
+      15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  some:
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c10/s0/live'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnDemandCloseAfter: 10s
     runOnDemandRestart: true
     source: publisher
@@ -170,12 +190,10 @@ pprofServerCert: server.crt
 pprofServerKey: server.key
 pprofTrustedProxies: []
 protocols:
-- udp
-- multicast
 - tcp
 readTimeout: 10s
 rtcpAddress: :8001
-rtmp: true
+rtmp: false
 rtmpAddress: :1935
 rtmpEncryption: 'no'
 rtmpServerCert: server.crt
@@ -192,14 +210,14 @@ runOnConnectRestart: false
 runOnDisconnect: null
 serverCert: server.crt
 serverKey: server.key
-srt: true
+srt: false
 srtAddress: :8890
 udpMaxPayloadSize: 1472
 webrtc: true
 webrtcAdditionalHosts:
-- 172.21.6.167
+- 172.30.0.190
 - 127.0.0.1
-webrtcAddress: :8889
+webrtcAddress: :8891
 webrtcAllowOrigin: '*'
 webrtcEncryption: false
 webrtcHandshakeTimeout: 10s

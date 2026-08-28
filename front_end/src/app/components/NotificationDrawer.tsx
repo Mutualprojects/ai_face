@@ -123,8 +123,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
           width: "100%",
           maxWidth: 420,
           zIndex: 9999,
-          background: "#ffffff",
-          boxShadow: "-10px 0 40px rgba(0,0,0,0.2)",
+          background: "var(--bg-panel)",
+          boxShadow: "-10px 0 40px rgba(0,0,0,0.5)",
           display: "flex",
           flexDirection: "column",
           animation: "slideLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -134,8 +134,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
         <div
           style={{
             padding: "20px 24px",
-            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-            color: "#ffffff",
+            background: "linear-gradient(135deg, var(--bg-sidebar) 0%, var(--bg-card) 100%)",
+            color: "var(--text-primary)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -163,7 +163,7 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
             style={{
               background: "none",
               border: "none",
-              color: "#94a3b8",
+              color: "var(--text-muted)",
               cursor: "pointer",
               padding: 4,
             }}
@@ -176,8 +176,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
         <div
           style={{
             padding: "12px 20px",
-            background: "#f8fafc",
-            borderBottom: "1px solid #e2e8f0",
+            background: "var(--bg-input)",
+            borderBottom: "1px solid var(--border-strong)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -198,8 +198,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
                   fontSize: 11.5,
                   fontWeight: 700,
                   border: "none",
-                  background: filter === f.id ? "#6366f1" : "#e2e8f0",
-                  color: filter === f.id ? "#ffffff" : "#475569",
+                  background: filter === f.id ? "#6366f1" : "var(--border-strong)",
+                  color: filter === f.id ? "#ffffff" : "var(--text-secondary)",
                   cursor: "pointer",
                 }}
               >
@@ -229,8 +229,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
         {/* Notifications List */}
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           {filteredNotifs.length === 0 ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>
-              <Bell size={36} color="#cbd5e1" style={{ marginBottom: 12 }} />
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+              <Bell size={36} color="var(--border-strong)" style={{ marginBottom: 12 }} />
               <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>All clear! No alerts</p>
             </div>
           ) : (
@@ -240,8 +240,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
                 style={{
                   padding: 14,
                   borderRadius: 14,
-                  border: "1px solid #e2e8f0",
-                  background: n.read ? "#ffffff" : "rgba(99,102,241,0.03)",
+                  border: "1px solid var(--border-strong)",
+                  background: n.read ? "var(--bg-panel)" : "rgba(99,102,241,0.03)",
                   borderLeft: `4px solid ${
                     n.type === "critical" ? "#ef4444" : n.type === "warning" ? "#f59e0b" : n.type === "success" ? "#10b981" : "#3b82f6"
                   }`,
@@ -262,11 +262,11 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
                   >
                     {n.category}
                   </span>
-                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{n.timestamp}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{n.timestamp}</span>
                 </div>
 
-                <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "#0f172a" }}>{n.title}</h4>
-                <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.4 }}>{n.message}</p>
+                <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-primary)" }}>{n.title}</h4>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>{n.message}</p>
 
                 {n.actionUrl && (
                   <button
@@ -279,11 +279,11 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
                       marginTop: 4,
                       padding: "5px 10px",
                       borderRadius: 6,
-                      background: "#f1f5f9",
-                      border: "1px solid #cbd5e1",
+                      background: "var(--bg-hover)",
+                      border: "1px solid var(--border-strong)",
                       fontSize: 11.5,
                       fontWeight: 700,
-                      color: "#334155",
+                      color: "var(--text-secondary)",
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",

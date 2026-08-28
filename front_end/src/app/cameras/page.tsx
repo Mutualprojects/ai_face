@@ -13,30 +13,51 @@ import {
   X,
   MapPin,
   Map,
-  Link as LinkIcon
+  Link as LinkIcon,
+  PlugZap
 } from "lucide-react";
+import { stripPassword } from "@/lib/rtsp";
 
 interface Camera {
   id: string;
   name: string;
   rtsp_url: string | null;
+  rtsp_url_editable?: string | null;
+  has_credentials?: boolean;
+  credentials_corrupted?: boolean;
+  via_relay?: boolean;
   location: string | null;
   zone: string | null;
   status: string;
+  stream_state?: string;
   last_seen_at?: string;
   created_at?: string;
 }
 
+type TestState = {
+  status: "idle" | "testing" | "done";
+  state?: string;
+  detail?: string;
+};
+
+const STREAM_STATE_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+  ONLINE:      { bg: "var(--green-dim)", fg: "#15803d", label: "ONLINE" },
+  CONNECTING:  { bg: "var(--amber-dim)", fg: "#a16207", label: "CONNECTING" },
+  OFFLINE:     { bg: "var(--bg-hover)", fg: "var(--text-muted)", label: "OFFLINE" },
+  AUTH_FAILED: { bg: "var(--red-dim)", fg: "#b91c1c", label: "AUTH FAILED" },
+  RTSP_ERROR:  { bg: "var(--amber-dim)", fg: "#c2410c", label: "RTSP ERROR" },
+};
+
 const fieldClass = "input-dark w-full px-4 py-2.5 text-[14px]";
-const labelClass = "block text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500 mb-2";
+const labelClass = "block text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-2";
 
 function Stat({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div className="flex flex-col items-center leading-tight">
-      <span className={`text-[20px] font-bold ${highlight ? "text-[#6366f1]" : "text-slate-800"}`}>
+      <span className={`text-[20px] font-bold ${highlight ? "text-[#6366f1]" : "text-[var(--text-primary)]"}`}>
         {value}
       </span>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 mt-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mt-0.5">
         {label}
       </span>
     </div>
@@ -54,6 +75,10 @@ export default function CamerasPage() {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [rtspUrl, setRtspUrl] = useState("");
+  const [rtspPassword, setRtspPassword] = useState("");
+  const [hasStoredCredentials, setHasStoredCredentials] = useState(false);
+  const [credentialsCorrupted, setCredentialsCorrupted] = useState(false);
+  const [viaRelay, setViaRelay] = useState(false);
   const [location, setLocation] = useState("");
   const [zone, setZone] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -61,6 +86,7 @@ export default function CamerasPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
+  const [testState, setTestState] = useState<TestState>({ status: "idle" });
 
   const fetchCameras = async () => {
     setLoading(true);
@@ -87,11 +113,16 @@ export default function CamerasPage() {
     setId("");
     setName("");
     setRtspUrl("");
+    setRtspPassword("");
+    setHasStoredCredentials(false);
+    setCredentialsCorrupted(false);
+    setViaRelay(false);
     setLocation("");
     setZone("");
     setIsActive(true);
     setFormError("");
     setFormSuccess("");
+    setTestState({ status: "idle" });
     setShowDrawer(true);
   };
 
@@ -99,12 +130,19 @@ export default function CamerasPage() {
     setEditCamId(cam.id);
     setId(cam.id);
     setName(cam.name);
-    setRtspUrl(cam.rtsp_url || "");
+    // Pre-fill with the password-free URL — never the masked display one.
+    const editable = cam.rtsp_url_editable || stripPassword(cam.rtsp_url || "");
+    setRtspUrl(editable);
+    setRtspPassword("");
+    setHasStoredCredentials(Boolean(cam.has_credentials));
+    setCredentialsCorrupted(Boolean(cam.credentials_corrupted));
+    setViaRelay(Boolean(cam.via_relay));
     setLocation(cam.location || "");
     setZone(cam.zone || "");
     setIsActive(cam.status === "active");
     setFormError("");
     setFormSuccess("");
+    setTestState({ status: "idle" });
     setShowDrawer(true);
   };
 
@@ -136,10 +174,54 @@ export default function CamerasPage() {
     }
   };
 
+  const handleTestConnection = async () => {
+    const url = rtspUrl.trim();
+    if (!url) {
+      setTestState({ status: "done", state: "INVALID", detail: "Enter an RTSP URL first." });
+      return;
+    }
+    if (url.includes("***")) {
+      setTestState({ status: "done", state: "INVALID", detail: "URL contains a masked password (***). Enter the real password." });
+      return;
+    }
+    setTestState({ status: "testing" });
+    try {
+      const res = await fetch("/api/cameras/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rtsp_url: url, rtsp_password: rtspPassword || null, via_relay: viaRelay }),
+      });
+      const data = await res.json();
+      setTestState({
+        status: "done",
+        state: data.state || "RTSP_ERROR",
+        detail: data.detail || data.error || "Probe finished.",
+      });
+    } catch {
+      setTestState({ status: "done", state: "OFFLINE", detail: "Could not reach the probe service." });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id.trim() || !name.trim()) {
       setFormError("Camera ID and Name are required.");
+      return;
+    }
+
+    const trimmedUrl = rtspUrl.trim();
+    if (trimmedUrl && !trimmedUrl.startsWith("device:") && !trimmedUrl.startsWith("rtsp://")) {
+      setFormError("Stream URL must start with rtsp://");
+      return;
+    }
+    // Hard guard: a masked display URL must never be saved as credentials.
+    if (trimmedUrl.includes("***")) {
+      setFormError("This URL contains a masked password (***). Type the full URL with the real camera password.");
+      return;
+    }
+    // Legacy corrupted rows hold '***' as the stored password — force a re-entry.
+    if (credentialsCorrupted && !rtspPassword.trim() && !(trimmedUrl.split("@")[0] || "").split(":").slice(2).join(":")) {
+      setFormError("Stored credentials are corrupted — please re-enter the camera password below.");
       return;
     }
 
@@ -156,6 +238,8 @@ export default function CamerasPage() {
         id: id.trim(),
         name: name.trim(),
         rtsp_url: rtspUrl.trim() || null,
+        rtsp_password: rtspPassword.trim() || null,
+        via_relay: viaRelay,
         location: location.trim() || null,
         zone: zone.trim() || null,
         status: isActive ? "active" : "inactive",
@@ -205,17 +289,17 @@ export default function CamerasPage() {
             <Video size={16} strokeWidth={2.5} />
             Hardware & Surveillance
           </div>
-          <h1 className="text-[32px] leading-none font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-[32px] leading-none font-extrabold tracking-tight text-[var(--text-primary)]">
             Camera Management
           </h1>
-          <p className="text-[14px] mt-3 text-slate-500 font-medium">
+          <p className="text-[14px] mt-3 text-[var(--text-muted)] font-medium">
             Configure video feeds, locations, and stream statuses for your facial recognition system.
           </p>
         </div>
 
         <div className="glass flex items-center gap-6 rounded-2xl px-7 py-4">
           <Stat label="Total Cameras" value={cameras.length} />
-          <div className="h-10 w-px bg-slate-200" />
+          <div className="h-10 w-px bg-[var(--border-strong)]" />
           <Stat label="Active Streams" value={activeCamerasCount} highlight />
         </div>
       </div>
@@ -229,7 +313,7 @@ export default function CamerasPage() {
 
         {/* Search */}
         <div className="relative flex-1 min-w-[280px]">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
             type="text"
             placeholder="Search by ID, name, or location…"
@@ -257,7 +341,7 @@ export default function CamerasPage() {
           ))}
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center gap-4 py-16 px-6 rounded-2xl bg-white border border-red-100 text-red-500 shadow-sm">
+        <div className="flex flex-col items-center gap-4 py-16 px-6 rounded-2xl bg-[var(--bg-panel)] border border-red-100 text-red-500 shadow-sm">
           <AlertTriangle size={36} />
           <div className="text-[15px] font-semibold text-center">{error}</div>
           <button onClick={fetchCameras} className="btn-secondary !text-red-500 !border-red-200 mt-2">
@@ -265,9 +349,9 @@ export default function CamerasPage() {
           </button>
         </div>
       ) : filteredCameras.length === 0 ? (
-        <div className="text-center py-24 px-6 glass rounded-2xl text-slate-500">
+        <div className="text-center py-24 px-6 glass rounded-2xl text-[var(--text-muted)]">
           <Video size={48} className="mx-auto mb-5 opacity-30" />
-          <h3 className="text-[18px] font-bold mb-2 text-slate-800">
+          <h3 className="text-[18px] font-bold mb-2 text-[var(--text-primary)]">
             No Cameras Found
           </h3>
           <p className="text-[14.5px] font-medium">
@@ -286,7 +370,7 @@ export default function CamerasPage() {
               {/* Status accent strip */}
               <div
                 className="absolute left-0 top-0 bottom-0 w-1.5 transition-colors"
-                style={{ background: cam.status === "active" ? "var(--violet)" : "#cbd5e1" }}
+                style={{ background: cam.status === "active" ? "var(--violet)" : "var(--text-muted)" }}
               />
 
               {/* Status Badge */}
@@ -295,9 +379,9 @@ export default function CamerasPage() {
                 title="Click to toggle status"
                 className="absolute top-5 right-5 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all"
                 style={{
-                  background: cam.status === "active" ? "var(--violet-soft)" : "#f1f5f9",
-                  color: cam.status === "active" ? "var(--violet)" : "#64748b",
-                  border: cam.status === "active" ? "1px solid var(--violet-glow)" : "1px solid #e2e8f0",
+                  background: cam.status === "active" ? "var(--violet-soft)" : "var(--bg-hover)",
+                  color: cam.status === "active" ? "var(--violet)" : "var(--text-muted)",
+                  border: cam.status === "active" ? "1px solid var(--violet-glow)" : "1px solid var(--border-strong)",
                 }}
               >
                 {cam.status === "active" ? (
@@ -307,38 +391,68 @@ export default function CamerasPage() {
                 )}
               </button>
 
+              {/* Stream connection state badge */}
+              {cam.stream_state && (
+                <div
+                  title={`Stream: ${cam.stream_state}`}
+                  className="absolute top-12 right-5 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide"
+                  style={{
+                    background: STREAM_STATE_STYLE[cam.stream_state]?.bg || "var(--bg-hover)",
+                    color: STREAM_STATE_STYLE[cam.stream_state]?.fg || "var(--text-muted)",
+                    border: "1px solid rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: STREAM_STATE_STYLE[cam.stream_state]?.fg || "var(--text-muted)" }}
+                  />
+                  {STREAM_STATE_STYLE[cam.stream_state]?.label || cam.stream_state}
+                </div>
+              )}
+
+              {/* Relay routing badge */}
+              {cam.via_relay && (
+                <div
+                  title="Stream tunneled through the relay server"
+                  className="absolute top-[86px] right-5 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold tracking-widest text-white"
+                  style={{ background: "#0ea5e9" }}
+                >
+                  RELAY
+                </div>
+              )}
+
               {/* Card Header */}
-              <div className="p-6 pl-7 flex items-start gap-4 border-b border-slate-100 bg-slate-50/50">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white shadow-sm border border-slate-200 text-[#6366f1] flex-shrink-0 group-hover:scale-110 transition-transform">
+              <div className="p-6 pl-7 flex items-start gap-4 border-b border-[var(--border)] bg-[var(--bg-hover)]/50">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-[var(--bg-panel)] shadow-sm border border-[var(--border-strong)] text-[#6366f1] flex-shrink-0 group-hover:scale-110 transition-transform">
                   <Video size={22} strokeWidth={2.5} />
                 </div>
                 <div className="min-w-0 flex-1 pr-16 mt-0.5">
-                  <h3 className="text-[17px] font-bold truncate text-slate-800">
+                  <h3 className="text-[17px] font-bold truncate text-[var(--text-primary)]">
                     {cam.name}
                   </h3>
-                  <div className="flex items-center gap-1.5 mt-1.5 font-mono text-[11px] text-slate-500">
-                    <span className="font-semibold uppercase tracking-wider text-slate-400">ID:</span>
+                  <div className="flex items-center gap-1.5 mt-1.5 font-mono text-[11px] text-[var(--text-muted)]">
+                    <span className="font-semibold uppercase tracking-wider text-[var(--text-muted)]">ID:</span>
                     <span className="truncate">{cam.id}</span>
                   </div>
                 </div>
               </div>
 
               {/* Card Body */}
-              <div className="p-6 pl-7 flex-1 flex flex-col gap-4.5 bg-white">
+              <div className="p-6 pl-7 flex-1 flex flex-col gap-4.5 bg-[var(--bg-panel)]">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-400 uppercase tracking-wide">
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                       <MapPin size={13} className="text-[#6366f1]" /> Location
                     </div>
-                    <div className="text-[14px] font-medium text-slate-700 truncate">
+                    <div className="text-[14px] font-medium text-[var(--text-secondary)] truncate">
                       {cam.location || "Not specified"}
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-400 uppercase tracking-wide">
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                       <Map size={13} className="text-[#6366f1]" /> Zone
                     </div>
-                    <div className="text-[14px] font-medium text-slate-700 truncate">
+                    <div className="text-[14px] font-medium text-[var(--text-secondary)] truncate">
                       {cam.zone || "Not assigned"}
                     </div>
                   </div>
@@ -346,10 +460,10 @@ export default function CamerasPage() {
                 
                 {cam.rtsp_url && (
                   <div className="flex flex-col gap-1 mt-1">
-                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-400 uppercase tracking-wide">
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                       <LinkIcon size={13} className="text-[#6366f1]" /> Stream URL
                     </div>
-                    <div className="font-mono text-[12px] text-slate-500 truncate bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5 mt-0.5" title={cam.rtsp_url}>
+                    <div className="font-mono text-[12px] text-[var(--text-muted)] truncate bg-[var(--bg-hover)] border border-[var(--border)] rounded-md px-2.5 py-1.5 mt-0.5" title={cam.rtsp_url}>
                       {cam.rtsp_url}
                     </div>
                   </div>
@@ -357,8 +471,8 @@ export default function CamerasPage() {
               </div>
 
               {/* Card Footer */}
-              <div className="px-6 pl-7 py-3.5 flex justify-between items-center border-t border-slate-100 bg-slate-50/50">
-                <div className="text-[11.5px] font-semibold text-slate-400">
+              <div className="px-6 pl-7 py-3.5 flex justify-between items-center border-t border-[var(--border)] bg-[var(--bg-hover)]/50">
+                <div className="text-[11.5px] font-semibold text-[var(--text-muted)]">
                   Added: {cam.created_at ? new Date(cam.created_at).toLocaleDateString() : "Unknown"}
                 </div>
 
@@ -366,14 +480,14 @@ export default function CamerasPage() {
                   <button
                     onClick={() => openEditDrawer(cam)}
                     title="Edit Camera"
-                    className="p-2 rounded-lg transition-colors hover:bg-white hover:shadow-sm text-[#6366f1] border border-transparent hover:border-slate-200"
+                    className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-panel)] hover:shadow-sm text-[#6366f1] border border-transparent hover:border-[var(--border-strong)]"
                   >
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={() => handleDelete(cam.id, cam.name)}
                     title="Delete Camera"
-                    className="p-2 rounded-lg transition-colors hover:bg-white hover:shadow-sm text-red-500 border border-transparent hover:border-red-100"
+                    className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-panel)] hover:shadow-sm text-red-500 border border-transparent hover:border-red-100"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -388,16 +502,16 @@ export default function CamerasPage() {
       {showDrawer && (
         <>
           <div
-            className="fixed inset-0 z-[99] bg-slate-900/40 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 z-[99] bg-black/40 backdrop-blur-sm transition-opacity"
             onClick={() => setShowDrawer(false)}
           />
-          <div className="fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white z-[100] flex flex-col shadow-2xl animate-slideInRight">
-            <div className="px-7 py-6 flex justify-between items-center border-b border-slate-100 bg-slate-50/50">
+          <div className="fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-[var(--bg-panel)] z-[100] flex flex-col shadow-2xl animate-slideInRight">
+            <div className="px-7 py-6 flex justify-between items-center border-b border-[var(--border)] bg-[var(--bg-hover)]/50">
               <div>
-                <h2 className="text-[20px] font-bold text-slate-800 mb-1">
+                <h2 className="text-[20px] font-bold text-[var(--text-primary)] mb-1">
                   {editCamId ? "Edit Camera" : "Configure New Camera"}
                 </h2>
-                <p className="text-[13px] text-slate-500 font-medium">
+                <p className="text-[13px] text-[var(--text-muted)] font-medium">
                   {editCamId ? "Update hardware and stream details." : "Add a new video feed to the system."}
                 </p>
               </div>
@@ -420,9 +534,9 @@ export default function CamerasPage() {
                     placeholder="e.g. camera_entrance"
                     value={id}
                     onChange={(e) => setId(e.target.value)}
-                    className={`${fieldClass} font-mono ${editCamId ? "opacity-60 cursor-not-allowed bg-slate-100" : ""}`}
+                    className={`${fieldClass} font-mono ${editCamId ? "opacity-60 cursor-not-allowed bg-[var(--bg-hover)]" : ""}`}
                   />
-                  {!editCamId && <span className="text-[11px] text-slate-400 mt-1.5 block font-medium">Must match the backend camera config identifier.</span>}
+                  {!editCamId && <span className="text-[11px] text-[var(--text-muted)] mt-1.5 block font-medium">Must match the backend camera config identifier.</span>}
                 </div>
 
                 <div>
@@ -443,9 +557,68 @@ export default function CamerasPage() {
                     type="text"
                     placeholder="rtsp://user:pass@192.168.1.100:554/stream1"
                     value={rtspUrl}
-                    onChange={(e) => setRtspUrl(e.target.value)}
+                    onChange={(e) => {
+                      setRtspUrl(e.target.value);
+                      setTestState({ status: "idle" });
+                    }}
                     className={`${fieldClass} font-mono`}
                   />
+                  <span className="text-[11px] text-[var(--text-muted)] mt-1.5 block font-medium">
+                    Tip: leave the password out of the URL and use the Password field below — special characters like @ : $ % are handled automatically.
+                  </span>
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    Camera Password {credentialsCorrupted && <span className="text-red-500">— re-enter required</span>}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={
+                      credentialsCorrupted
+                        ? "Stored password is corrupted (***) — type the real one"
+                        : hasStoredCredentials
+                          ? "••••••••  (leave blank to keep current)"
+                          : "Optional — only if the camera requires login"
+                    }
+                    value={rtspPassword}
+                    onChange={(e) => {
+                      setRtspPassword(e.target.value);
+                      setTestState({ status: "idle" });
+                    }}
+                    className={`${fieldClass} ${credentialsCorrupted ? "!border-red-300 bg-red-50" : ""}`}
+                  />
+                  {credentialsCorrupted && (
+                    <span className="text-[11px] text-red-500 mt-1.5 block font-medium">
+                      This camera was saved with a masked *** password earlier — that is why it shows AUTH FAILED. Enter the real password to repair it.
+                    </span>
+                  )}
+                </div>
+
+                {/* Test connection */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={testState.status === "testing" || !rtspUrl.trim()}
+                    className="btn-secondary px-4 py-2 text-[13px] flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <PlugZap size={15} className={testState.status === "testing" ? "animate-pulse" : ""} />
+                    {testState.status === "testing" ? "Probing camera…" : "Test Connection"}
+                  </button>
+                  {testState.status === "done" && testState.state && (
+                    <span
+                      className="px-3 py-1.5 rounded-full text-[11px] font-bold"
+                      style={{
+                        background: STREAM_STATE_STYLE[testState.state]?.bg || "#fef9c3",
+                        color: STREAM_STATE_STYLE[testState.state]?.fg || "#a16207",
+                      }}
+                      title={testState.detail}
+                    >
+                      {STREAM_STATE_STYLE[testState.state]?.label || testState.state}
+                      {testState.detail ? ` — ${testState.detail}` : ""}
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-5">
@@ -472,8 +645,29 @@ export default function CamerasPage() {
                 </div>
 
                 <label
+                  htmlFor="viaRelayToggle"
+                  className="flex items-start gap-3 rounded-xl px-4 py-3.5 cursor-pointer transition-colors border border-[var(--border-strong)] bg-[var(--bg-hover)] hover:bg-[var(--bg-hover)]"
+                >
+                  <input
+                    type="checkbox"
+                    id="viaRelayToggle"
+                    checked={viaRelay}
+                    onChange={(e) => setViaRelay(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 cursor-pointer accent-[#6366f1]"
+                  />
+                  <span>
+                    <span className="text-[14px] font-semibold text-[var(--text-secondary)] block">
+                      Route via relay server
+                    </span>
+                    <span className="text-[12px] text-[var(--text-muted)] font-medium">
+                      Use when this camera is unreachable from the server (firewalled / different subnet). The stream is tunneled through go2rtc on 172.30.0.200 — same video quality, same presence detection.
+                    </span>
+                  </span>
+                </label>
+
+                <label
                   htmlFor="isActiveCamToggle"
-                  className="flex items-center gap-3 mt-2 rounded-xl px-4 py-3.5 cursor-pointer transition-colors border border-slate-200 bg-slate-50 hover:bg-slate-100"
+                  className="flex items-center gap-3 mt-2 rounded-xl px-4 py-3.5 cursor-pointer transition-colors border border-[var(--border-strong)] bg-[var(--bg-hover)] hover:bg-[var(--bg-hover)]"
                 >
                   <input
                     type="checkbox"
@@ -482,7 +676,7 @@ export default function CamerasPage() {
                     onChange={(e) => setIsActive(e.target.checked)}
                     className="w-4 h-4 cursor-pointer accent-[#6366f1]"
                   />
-                  <span className="text-[14px] font-semibold text-slate-700">
+                  <span className="text-[14px] font-semibold text-[var(--text-secondary)]">
                     Set stream as active
                   </span>
                 </label>
@@ -501,7 +695,7 @@ export default function CamerasPage() {
                   </div>
                 )}
 
-                <div className="flex gap-4 mt-4 pt-6 border-t border-slate-100">
+                <div className="flex gap-4 mt-4 pt-6 border-t border-[var(--border)]">
                   <button
                     type="button"
                     onClick={() => setShowDrawer(false)}

@@ -10,8 +10,8 @@ export default function LoadingScreen() {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #f6f7fb;
-          background-image: radial-gradient(circle at 50% 50%, #ffffff 0%, #f6f7fb 100%);
+          background: var(--bg-deep);
+          background-image: radial-gradient(circle at 50% 50%, var(--bg-card) 0%, var(--bg-deep) 100%);
           position: fixed;
           inset: 0;
           z-index: 9999;

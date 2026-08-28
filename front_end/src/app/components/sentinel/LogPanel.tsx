@@ -97,10 +97,10 @@ function ConfidenceMeter({ value, color }: { value: number; color: string }) {
   return (
     <div style={{ marginTop: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-        <span style={{ fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Confidence Score</span>
+        <span style={{ fontSize: 9.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Confidence Score</span>
         <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color }}>{pct}%</span>
       </div>
-      <div style={{ height: 5, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: 5, background: "var(--bg-hover)", borderRadius: 3, overflow: "hidden" }}>
         <div style={{
           height: "100%", width: `${pct}%`, borderRadius: 3,
           background: pct >= 70 ? "linear-gradient(90deg, #10b981, #059669)"
@@ -117,8 +117,8 @@ function ConfidenceMeter({ value, color }: { value: number; color: string }) {
 function Top3Comparison({ candidates, faces }: { candidates: Top3Candidate[], faces: RegisteredFace[] }) {
   if (!candidates || candidates.length === 0) return null;
   return (
-    <div style={{ marginTop: 8, background: "#f8fafc", padding: "6px 8px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-      <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+    <div style={{ marginTop: 8, background: "var(--bg-input)", padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border-strong)" }}>
+      <div style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
         <Sparkles size={10} color="#6366f1" />
         Top Gallery Match Candidates
       </div>
@@ -131,20 +131,20 @@ function Top3Comparison({ candidates, faces }: { candidates: Top3Candidate[], fa
           return (
             <div key={c.name + i} style={{
               flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-              background: isTop ? "rgba(99,102,241,0.06)" : "#ffffff",
-              border: `1px solid ${isTop ? "rgba(99,102,241,0.3)" : "#e2e8f0"}`,
+              background: isTop ? "rgba(99,102,241,0.06)" : "var(--bg-card)",
+              border: `1px solid ${isTop ? "rgba(99,102,241,0.3)" : "var(--border-strong)"}`,
               borderRadius: 6, padding: "5px 4px",
             }}>
               {photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={photoUrl} alt={c.name} style={{
                   width: 32, height: 32, borderRadius: 6, objectFit: "cover",
-                  border: `1.5px solid ${isTop ? "#6366f1" : "#cbd5e1"}`,
+                  border: `1.5px solid ${isTop ? "#6366f1" : "var(--border-strong)"}`,
                 }} />
               ) : (
                 <div style={{
                   width: 32, height: 32, borderRadius: 6,
-                  background: "#f1f5f9",
+                  background: "var(--bg-hover)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   <User size={14} color="#64748b" />
@@ -156,7 +156,7 @@ function Top3Comparison({ candidates, faces }: { candidates: Top3Candidate[], fa
               <div style={{
                 fontSize: 8, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700,
                 color: pct >= 40 ? "#d97706" : "#64748b",
-                background: pct >= 40 ? "#fef3c7" : "#f1f5f9",
+                background: pct >= 40 ? "#fef3c7" : "var(--bg-hover)",
                 padding: "1px 4px", borderRadius: 3,
               }}>
                 {pct}%
@@ -186,6 +186,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
   const [deleteMsg, setDeleteMsg] = useState("");
   const [selectedLog, setSelectedLog] = useState<EnrichedFaceLog | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showLowConfidence, setShowLowConfidence] = useState<boolean>(true);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -241,7 +242,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filter, cameraFilter, minConfFilter, sortBy, viewMode]);
+  }, [searchQuery, filter, cameraFilter, minConfFilter, sortBy, viewMode, showLowConfidence]);
 
   const handleDeleteUnknown = async () => {
     if (!window.confirm("Are you sure you want to clear ALL unknown face detection logs from the database at once?")) {
@@ -363,10 +364,21 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
     return Math.round((sum / allLogs.length) * 100);
   }, [allLogs]);
 
+  const falsePositiveCount = useMemo(() => allLogs.filter(l =>
+    (l.person_name === "Unknown" && l.confidence < 0.30) ||
+    (l.person_name !== "Unknown" && l.confidence < 0.20)
+  ).length, [allLogs]);
+
   // Filtering and Sorting logic
   const filteredAndSortedLogs = useMemo(() => {
     return allLogs
       .filter(log => {
+        // Filter out likely false positives: very low confidence unknowns and implausible matches
+        if (!showLowConfidence) {
+          if (log.person_name === "Unknown" && log.confidence < 0.30) return false;
+          if (log.person_name !== "Unknown" && log.confidence < 0.20) return false;
+        }
+
         // Status filter tab
         if (filter === "matched" && (log.person_name === "Unknown" || log.designation?.toLowerCase() === "visitor" || log.person_name.toLowerCase().startsWith("visitor:"))) return false;
         if (filter === "unknown" && log.person_name !== "Unknown") return false;
@@ -406,7 +418,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
         if (sortBy === "conf_asc") return (a.confidence || 0) - (b.confidence || 0);
         return 0;
       });
-  }, [allLogs, filter, cameraFilter, minConfFilter, searchQuery, sortBy]);
+  }, [allLogs, filter, cameraFilter, minConfFilter, searchQuery, sortBy, showLowConfidence]);
 
   // Kanban groups
   const kanbanGroups = useMemo(() => {
@@ -484,7 +496,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
   };
 
   return (
-    <div style={{ color: "#0f172a" }}>
+    <div style={{ color: "var(--text-primary)" }}>
       {/* 1. Header Banner & View Switcher */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -493,7 +505,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontWeight: 800, fontSize: 17, color: "#0f172a", letterSpacing: "-0.01em" }}>Database Detection Logs</span>
+              <span style={{ fontWeight: 800, fontSize: 17, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Database Detection Logs</span>
               <span style={{
                 fontSize: 10, color: "#10b981", fontWeight: 700, background: "rgba(16,185,129,0.1)",
                 padding: "2px 8px", borderRadius: 10, border: "1px solid rgba(16,185,129,0.3)",
@@ -503,7 +515,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 Realtime Sync
               </span>
             </div>
-            <p style={{ fontSize: 11, color: "#64748b", margin: "2px 0 0 0" }}>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 0 0" }}>
               Live Supabase database records • {allLogs.length} total entries indexed
             </p>
           </div>
@@ -512,7 +524,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
         {/* Header Right Actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {/* View Mode Switcher Buttons */}
-          <div style={{ display: "flex", gap: 2, background: "#e2e8f0", padding: 3, borderRadius: 9 }}>
+          <div style={{ display: "flex", gap: 2, background: "var(--bg-hover)", padding: 3, borderRadius: 9, flexWrap: "wrap" }}>
             {[
               { id: "cards", label: "Cards", Icon: LayoutGrid },
               { id: "list", label: "List", Icon: ListIcon },
@@ -526,7 +538,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 style={{
                   padding: "5px 10px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11,
                   fontWeight: viewMode === id ? 800 : 600,
-                  background: viewMode === id ? "#ffffff" : "transparent",
+                  background: viewMode === id ? "var(--bg-card)" : "transparent",
                   color: viewMode === id ? "#4f46e5" : "#475569",
                   boxShadow: viewMode === id ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
                   display: "flex", alignItems: "center", gap: 5,
@@ -540,8 +552,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
           </div>
 
           <button onClick={() => { fetchFilteredLogs(); onRefresh(); }} style={{
-            background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 8,
-            padding: "6px 12px", color: "#334155", cursor: "pointer", fontSize: 11,
+            background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 8,
+            padding: "6px 12px", color: "var(--text-secondary)", cursor: "pointer", fontSize: 11,
             display: "flex", alignItems: "center", gap: 6, fontWeight: 700, transition: "all 0.2s"
           }}>
             <RefreshCw size={12} color="#475569" />
@@ -562,14 +574,14 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
       {/* 2. KPI Summary Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 16 }}>
-        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
-          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
+        <div style={{ background: "var(--bg-card)", padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border-strong)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
             <Database size={11} color="#64748b" />
             Total Logged
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{allLogs.length}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{allLogs.length}</div>
         </div>
-        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(16,185,129,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+        <div style={{ background: "var(--bg-card)", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(16,185,129,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>
           <div style={{ fontSize: 10, color: "#059669", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
             <UserCheck size={11} color="#059669" />
             Identified (Known)
@@ -578,7 +590,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             {knownCount} <span style={{ fontSize: 11, fontWeight: 600, color: "#10b981" }}>({allLogs.length ? Math.round((knownCount/allLogs.length)*100) : 0}%)</span>
           </div>
         </div>
-        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(245,158,11,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+        <div style={{ background: "var(--bg-card)", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(245,158,11,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>
           <div style={{ fontSize: 10, color: "#d97706", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
             <Users size={11} color="#d97706" />
             Visitor Detections
@@ -587,14 +599,14 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             {visitorCount} <span style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b" }}>({allLogs.length ? Math.round((visitorCount/allLogs.length)*100) : 0}%)</span>
           </div>
         </div>
-        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+        <div style={{ background: "var(--bg-card)", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>
           <div style={{ fontSize: 10, color: "#dc2626", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
             <AlertTriangle size={11} color="#dc2626" />
             Security Alerts
           </div>
           <div style={{ fontSize: 20, fontWeight: 800, color: "#dc2626", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>{unknownCount}</div>
         </div>
-        <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(99,102,241,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+        <div style={{ background: "var(--bg-card)", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(99,102,241,0.3)", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>
           <div style={{ fontSize: 10, color: "#4f46e5", fontWeight: 700, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4 }}>
             <TrendingUp size={11} color="#4f46e5" />
             Avg Confidence
@@ -605,7 +617,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
       {/* 3. Search Bar */}
       <div style={{ position: "relative", marginBottom: 12 }}>
-        <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#94a3b8" }}>
+        <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-muted)" }}>
           <Search size={15} color="#94a3b8" />
         </div>
         <input
@@ -615,8 +627,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
           placeholder="Search logs by name, camera, location, department, or employee code..."
           style={{
             width: "100%", padding: "9px 36px 9px 36px", borderRadius: 10,
-            border: "1.5px solid #cbd5e1", background: "#ffffff", fontSize: 12.5,
-            color: "#0f172a", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+            border: "1.5px solid var(--border-strong)", background: "var(--bg-card)", fontSize: 12.5,
+            color: "var(--text-primary)", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
             transition: "all 0.2s"
           }}
         />
@@ -625,8 +637,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             onClick={() => setSearchQuery("")}
             style={{
               position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-              background: "#e2e8f0", border: "none", borderRadius: "50%", width: 18, height: 18,
-              cursor: "pointer", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center"
+              background: "var(--bg-hover)", border: "none", borderRadius: "50%", width: 18, height: 18,
+              cursor: "pointer", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center"
             }}
           >
             <X size={11} color="#475569" />
@@ -637,7 +649,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
       {/* 4. Controls & Filters Bar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
         {/* Filter Tabs */}
-        <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 8, padding: 3 }}>
+        <div style={{ display: "flex", gap: 4, background: "var(--bg-hover)", borderRadius: 8, padding: 3, flexWrap: "wrap" }}>
           {(["all", "matched", "unknown", "high", "visitors"] as FilterTab[]).map(tab => (
             <button
                key={tab}
@@ -645,7 +657,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                style={{
                  padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11,
                  fontWeight: filter === tab ? 700 : 600,
-                 background: filter === tab ? "#ffffff" : "transparent",
+                 background: filter === tab ? "var(--bg-card)" : "transparent",
                  color: filter === tab
                    ? tab === "matched" ? "#059669"
                      : tab === "unknown" ? "#dc2626"
@@ -666,6 +678,30 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
           ))}
         </div>
 
+        {/* False Positive Filter Toggle */}
+        {falsePositiveCount > 0 && (
+          <button
+            onClick={() => setShowLowConfidence(prev => !prev)}
+            style={{
+              padding: "5px 10px", borderRadius: 7, border: showLowConfidence ? "1px solid rgba(245,158,11,0.4)" : "1px solid var(--border-strong)",
+              background: showLowConfidence ? "rgba(245,158,11,0.1)" : "var(--bg-hover)",
+              color: showLowConfidence ? "#d97706" : "var(--text-secondary)",
+              cursor: "pointer", fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5,
+              transition: "all 0.2s",
+            }}
+          >
+            <AlertTriangle size={11} color={showLowConfidence ? "#d97706" : "var(--text-muted)"} />
+            {showLowConfidence ? "Hide" : "Show"} low-confidence
+            <span style={{
+              fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 8,
+              background: showLowConfidence ? "rgba(245,158,11,0.2)" : "rgba(220,38,38,0.12)",
+              color: showLowConfidence ? "#d97706" : "#dc2626",
+            }}>
+              {falsePositiveCount} filtered
+            </span>
+          </button>
+        )}
+
         {/* Dropdowns & Actions */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {/* Camera Filter Dropdown */}
@@ -676,8 +712,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 onChange={e => setCameraFilter(e.target.value)}
                 style={{
                   padding: "5.5px 10px 5.5px 28px", fontSize: 11, fontWeight: 650,
-                  borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff",
-                  color: "#334155", outline: "none", cursor: "pointer"
+                  borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-card)",
+                  color: "var(--text-secondary)", outline: "none", cursor: "pointer"
                 }}
               >
                 <option value="all">All Cameras ({cameras.length})</option>
@@ -698,8 +734,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               onChange={e => setMinConfFilter(Number(e.target.value))}
               style={{
                 padding: "5.5px 10px 5.5px 28px", fontSize: 11, fontWeight: 650,
-                borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff",
-                color: "#334155", outline: "none", cursor: "pointer"
+                borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-card)",
+                color: "var(--text-secondary)", outline: "none", cursor: "pointer"
               }}
             >
               <option value={0}>Any Confidence</option>
@@ -717,8 +753,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               onChange={e => setSortBy(e.target.value as SortOption)}
               style={{
                 padding: "5.5px 10px 5.5px 28px", fontSize: 11, fontWeight: 650,
-                borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff",
-                color: "#334155", outline: "none", cursor: "pointer"
+                borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-card)",
+                color: "var(--text-secondary)", outline: "none", cursor: "pointer"
               }}
             >
               <option value="newest">Newest First</option>
@@ -735,8 +771,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             disabled={isDeleting || unknownCount === 0}
             title="Delete all unknown face logs from database"
             style={{
-              background: unknownCount > 0 ? "rgba(239,68,68,0.1)" : "#f1f5f9",
-              border: `1px solid ${unknownCount > 0 ? "rgba(239,68,68,0.3)" : "#cbd5e1"}`,
+              background: unknownCount > 0 ? "rgba(239,68,68,0.1)" : "var(--bg-hover)",
+              border: `1px solid ${unknownCount > 0 ? "rgba(239,68,68,0.3)" : "var(--border-strong)"}`,
               borderRadius: 8, padding: "5.5px 10px", cursor: unknownCount > 0 ? "pointer" : "not-allowed",
               color: unknownCount > 0 ? "#dc2626" : "#94a3b8",
               fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
@@ -753,8 +789,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             disabled={isDeleting || allLogs.length === 0}
             title="Delete ALL face detection logs from database"
             style={{
-              background: allLogs.length > 0 ? "rgba(220,38,38,0.12)" : "#f1f5f9",
-              border: `1px solid ${allLogs.length > 0 ? "rgba(220,38,38,0.4)" : "#cbd5e1"}`,
+              background: allLogs.length > 0 ? "rgba(220,38,38,0.12)" : "var(--bg-hover)",
+              border: `1px solid ${allLogs.length > 0 ? "rgba(220,38,38,0.4)" : "var(--border-strong)"}`,
               borderRadius: 8, padding: "5.5px 10px", cursor: allLogs.length > 0 ? "pointer" : "not-allowed",
               color: allLogs.length > 0 ? "#b91c1c" : "#94a3b8",
               fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
@@ -768,9 +804,10 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
       </div>
 
       {/* Search results summary count & page size selector */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, fontSize: 11, color: "#64748b", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, fontSize: 11, color: "var(--text-muted)", flexWrap: "wrap", gap: 8 }}>
         <span>
           Showing <strong>{filteredAndSortedLogs.length}</strong> of <strong>{allLogs.length}</strong> database logs
+          {!showLowConfidence && falsePositiveCount > 0 && ` (${falsePositiveCount} low-confidence hidden)`}
           {searchQuery && ` matching "${searchQuery}"`}
         </span>
         {viewMode !== "kanban" && viewMode !== "calendar" && filteredAndSortedLogs.length > 0 && (
@@ -780,7 +817,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               <select
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                style={{ padding: "2px 6px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11, fontWeight: 700, background: "#ffffff" }}
+                style={{ padding: "2px 6px", borderRadius: 6, border: "1px solid var(--border-strong)", fontSize: 11, fontWeight: 700, background: "var(--bg-card)" }}
               >
                 <option value={12}>12</option>
                 <option value={24}>24</option>
@@ -796,9 +833,9 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
       {/* 5. Main Content Display across 4 View Modes */}
       {filteredAndSortedLogs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "40px 16px", background: "#f8fafc", borderRadius: 12, border: "1.5px dashed #cbd5e1", color: "#64748b", fontSize: 12 }}>
+        <div style={{ textAlign: "center", padding: "40px 16px", background: "var(--bg-input)", borderRadius: 12, border: "1.5px dashed var(--border-strong)", color: "var(--text-muted)", fontSize: 12 }}>
           <AlertTriangle size={32} color="#94a3b8" style={{ margin: "0 auto 8px", display: "block" }} />
-          <div style={{ fontWeight: 700, color: "#334155", fontSize: 13, marginBottom: 4 }}>No matching logs found</div>
+          <div style={{ fontWeight: 700, color: "var(--text-secondary)", fontSize: 13, marginBottom: 4 }}>No matching logs found</div>
         {searchQuery ? "Try clearing your search query or adjusting your filters." : "No face detection logs recorded in the database yet."}
       </div>
       ) : viewMode === "calendar" ? (
@@ -809,16 +846,16 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button
                 onClick={() => changeCalMonth(-1)}
-                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#334155" }}
+                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-card)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}
               >
                 <ChevronLeft size={15} />
               </button>
-              <span style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", minWidth: 150, textAlign: "center" }}>
+              <span style={{ fontWeight: 800, fontSize: 16, color: "var(--text-primary)", minWidth: 150, textAlign: "center" }}>
                 {new Date(calMonth.y, calMonth.m, 1).toLocaleString("en-US", { month: "long", year: "numeric" })}
               </span>
               <button
                 onClick={() => changeCalMonth(1)}
-                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#334155" }}
+                style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-card)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}
               >
                 <ChevronRight size={15} />
               </button>
@@ -827,24 +864,24 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                   const d = new Date();
                   setCalMonth({ y: d.getFullYear(), m: d.getMonth() });
                 }}
-                style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#334155" }}
+                style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-card)", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}
               >
                 Today
               </button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, color: "#475569", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", flexWrap: "wrap" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 9, height: 9, borderRadius: 3, background: "#10b981" }} />
-                Matched: <strong style={{ color: "#0f172a" }}>{calMonthStats.matched}</strong>
+                Matched: <strong style={{ color: "var(--text-primary)" }}>{calMonthStats.matched}</strong>
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 9, height: 9, borderRadius: 3, background: "#ef4444" }} />
-                Unknown: <strong style={{ color: "#0f172a" }}>{calMonthStats.unknown}</strong>
+                Unknown: <strong style={{ color: "var(--text-primary)" }}>{calMonthStats.unknown}</strong>
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <CalendarIcon size={12} color="#64748b" />
-                Total: <strong style={{ color: "#0f172a" }}>{calMonthStats.total}</strong>
+                Total: <strong style={{ color: "var(--text-primary)" }}>{calMonthStats.total}</strong>
               </span>
             </div>
           </div>
@@ -852,7 +889,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
           {/* Weekday header */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-              <div key={day} style={{ textAlign: "center", fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 0" }}>
+              <div key={day} style={{ textAlign: "center", fontSize: 10, fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 0" }}>
                 {day}
               </div>
             ))}
@@ -876,8 +913,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                   disabled={dayLogs.length === 0}
                   style={{
                     minHeight: 74, borderRadius: 10, padding: 6, textAlign: "left", cursor: dayLogs.length > 0 ? "pointer" : "default",
-                    background: isSelected ? "#eef2ff" : inMonth ? "#ffffff" : "#f8fafc",
-                    border: isSelected ? "2px solid #6366f1" : isToday ? "2px solid #4f46e5" : "1px solid #e2e8f0",
+                    background: isSelected ? "#eef2ff" : inMonth ? "var(--bg-card)" : "var(--bg-input)",
+                    border: isSelected ? "2px solid #6366f1" : isToday ? "2px solid #4f46e5" : "1px solid var(--border-strong)",
                     opacity: inMonth ? 1 : 0.45,
                     display: "flex", flexDirection: "column", gap: 4, transition: "all 0.15s",
                     boxShadow: isSelected ? "0 2px 8px rgba(99,102,241,0.25)" : "0 1px 2px rgba(0,0,0,0.03)",
@@ -900,7 +937,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                           {unknown} unknown
                         </span>
                       )}
-                      <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600, marginTop: "auto" }}>
+                      <span style={{ fontSize: 9, color: "var(--text-muted)", fontWeight: 600, marginTop: "auto" }}>
                         {dayLogs.length} total
                       </span>
                     </>
@@ -915,22 +952,22 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
             {calSelectedDay ? (
               <>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>
                     Detections on {calSelectedDay.toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-                    <span style={{ color: "#64748b", fontWeight: 600, fontSize: 11, marginLeft: 6 }}>
+                    <span style={{ color: "var(--text-muted)", fontWeight: 600, fontSize: 11, marginLeft: 6 }}>
                       ({calDayLogs.length} {calDayLogs.length === 1 ? "record" : "records"})
                     </span>
                   </span>
                   <button
                     onClick={() => setCalSelectedDay(null)}
-                    style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 7, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "#334155", cursor: "pointer" }}
+                    style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 7, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer" }}
                   >
                     Clear Day Filter
                   </button>
                 </div>
 
                 {calDayLogs.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "24px 16px", background: "#f8fafc", borderRadius: 12, border: "1.5px dashed #cbd5e1", color: "#64748b", fontSize: 12 }}>
+                  <div style={{ textAlign: "center", padding: "24px 16px", background: "var(--bg-input)", borderRadius: 12, border: "1.5px dashed var(--border-strong)", color: "var(--text-muted)", fontSize: 12 }}>
                     No detections on this day.
                   </div>
                 ) : (
@@ -944,9 +981,9 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
                       return (
                         <div key={log.id} style={{
-                          background: "#ffffff", borderRadius: 14, padding: 14,
+                          background: "var(--bg-card)", borderRadius: 14, padding: 14,
                           border: `1.5px solid ${isKnown ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", gap: 10,
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 10,
                           transition: "transform 0.2s, box-shadow 0.2s"
                         }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -960,26 +997,26 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                           </div>
 
                           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                            <div style={{ width: 46, height: 46, borderRadius: 9, overflow: "hidden", border: "1.5px solid #e2e8f0", flexShrink: 0 }}>
+                            <div style={{ width: 46, height: 46, borderRadius: 9, overflow: "hidden", border: "1.5px solid var(--border-strong)", flexShrink: 0 }}>
                               {log.snapshot_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                               ) : (
-                                <div style={{ width: "100%", height: "100%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ width: "100%", height: "100%", background: "var(--bg-hover)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <Camera size={16} color="#94a3b8" />
                                 </div>
                               )}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 10, color: "#334155", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 <Camera size={11} color="#64748b" />
                                 {log.camera_name || "Camera"}
                               </div>
-                              <div style={{ fontSize: 9.5, color: "#94a3b8", fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 3 }}>
+                              <div style={{ fontSize: 9.5, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 3 }}>
                                 <Clock size={10} color="#94a3b8" />
                                 {timeAgo(ts)} • {new Date(ts || "").toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                               </div>
-                              <div style={{ fontSize: 9.5, color: "#64748b", fontWeight: 600 }}>
+                              <div style={{ fontSize: 9.5, color: "var(--text-muted)", fontWeight: 600 }}>
                                 Confidence: {pct}%
                               </div>
                             </div>
@@ -989,19 +1026,19 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               {log.registered_photo || registeredPhoto ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={log.registered_photo || registeredPhoto} alt="Ref" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", border: "1px solid #e2e8f0" }} />
+                                <img src={log.registered_photo || registeredPhoto} alt="Ref" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--border-strong)" }} />
                               ) : (
-                                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#f1f5f9", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--bg-hover)", border: "1px solid var(--border-strong)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   <Users size={12} color="#94a3b8" />
                                 </div>
                               )}
-                              {log.department && <span style={{ fontSize: 9.5, color: "#64748b", fontWeight: 600 }}>{log.department}</span>}
+                              {log.department && <span style={{ fontSize: 9.5, color: "var(--text-muted)", fontWeight: 600 }}>{log.department}</span>}
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "3px 7px", fontSize: 9.5, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                                 <Trash2 size={10} color="#dc2626" />
                               </button>
-                              <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 9px", fontSize: 9.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                              <button onClick={() => setSelectedLog(log)} style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 6, padding: "3px 9px", fontSize: 9.5, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                                 <Maximize2 size={10} color="#334155" />
                                 Inspect
                               </button>
@@ -1014,7 +1051,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 )}
               </>
             ) : (
-              <div style={{ textAlign: "center", padding: "18px 16px", background: "#f8fafc", borderRadius: 12, border: "1.5px dashed #cbd5e1", color: "#64748b", fontSize: 11.5 }}>
+              <div style={{ textAlign: "center", padding: "18px 16px", background: "var(--bg-input)", borderRadius: 12, border: "1.5px dashed var(--border-strong)", color: "var(--text-muted)", fontSize: 11.5 }}>
                 Click a day with detections to see its logs.
               </div>
             )}
@@ -1032,9 +1069,9 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
             return (
               <div key={log.id} style={{
-                background: "#ffffff", borderRadius: 14, padding: 14,
+                background: "var(--bg-card)", borderRadius: 14, padding: 14,
                 border: `1.5px solid ${isKnown ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", gap: 10,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", gap: 10,
                 transition: "transform 0.2s, box-shadow 0.2s"
               }}>
                 {/* Header: Name + Badge */}
@@ -1043,20 +1080,20 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
                     <span style={{ fontWeight: 800, fontSize: 14, color: statusColor }}>{isKnown ? log.person_name : "Unknown Person"}</span>
                   </div>
-                  <span style={{ fontSize: 10, color: "#64748b", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
                     <Clock size={10} color="#64748b" />
                     {timeAgo(ts)}
                   </span>
                 </div>
 
                 {/* Photos Side by Side */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", padding: 8, borderRadius: 10, border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-input)", padding: 8, borderRadius: 10, border: "1px solid var(--border-strong)" }}>
                   <div style={{ width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `2px solid ${statusColor}`, flexShrink: 0, position: "relative" }}>
                     {log.snapshot_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ width: "100%", height: "100%", background: "#e2e8f0" }} />
+                      <div style={{ width: "100%", height: "100%", background: "var(--bg-hover)" }} />
                     )}
                     <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7, textAlign: "center", fontWeight: 800 }}>LIVE</span>
                   </div>
@@ -1065,12 +1102,12 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                     <ArrowRight size={14} color={statusColor} />
                   </div>
 
-                  <div style={{ width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `2px solid ${isKnown ? "#6366f1" : "#cbd5e1"}`, flexShrink: 0, position: "relative" }}>
+                  <div style={{ width: 60, height: 60, borderRadius: 8, overflow: "hidden", border: `2px solid ${isKnown ? "#6366f1" : "var(--border-strong)"}`, flexShrink: 0, position: "relative" }}>
                     {registeredPhoto ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={registeredPhoto} alt="Ref" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ width: "100%", height: "100%", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#64748b", textAlign: "center" }}>No Photo</div>
+                      <div style={{ width: "100%", height: "100%", background: "var(--bg-hover)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "var(--text-muted)", textAlign: "center" }}>No Photo</div>
                     )}
                     <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 7, textAlign: "center", fontWeight: 800 }}>REF</span>
                   </div>
@@ -1080,9 +1117,9 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                       <Camera size={9} color="#4f46e5" />
                       {log.camera_name || "Camera"}
                     </span>
-                    <span style={{ fontSize: 9, color: "#64748b", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.camera_location || "Zone A"}</span>
+                    <span style={{ fontSize: 9, color: "var(--text-muted)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.camera_location || "Zone A"}</span>
                     {log.department && (
-                      <span style={{ fontSize: 8.5, color: "#334155", background: "#e2e8f0", padding: "1px 4px", borderRadius: 4, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <span style={{ fontSize: 8.5, color: "var(--text-secondary)", background: "var(--bg-hover)", padding: "1px 4px", borderRadius: 4, marginTop: 2, display: "inline-flex", alignItems: "center", gap: 3 }}>
                         <Building2 size={8} color="#334155" />
                         {log.department}
                       </span>
@@ -1095,12 +1132,12 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
                 {/* Footer Action */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                  <span style={{ fontSize: 9, color: "#64748b" }}>ID: {log.id.slice(0, 8)}...</span>
+                  <span style={{ fontSize: 9, color: "var(--text-muted)" }}>ID: {log.id.slice(0, 8)}...</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "3px 7px", fontSize: 10, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                       <Trash2 size={11} color="#dc2626" />
                     </button>
-                    <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                    <button onClick={() => setSelectedLog(log)} style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                       <Maximize2 size={11} color="#334155" />
                       Inspect
                     </button>
@@ -1122,7 +1159,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
             return (
               <div key={log.id} style={{
-                background: "#ffffff", borderRadius: 12, padding: "12px 14px",
+                background: "var(--bg-card)", borderRadius: 12, padding: "12px 14px",
                 border: `1.5px solid ${isKnown ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
                 boxShadow: "0 2px 8px rgba(0,0,0,0.03)", transition: "all 0.2s"
               }}>
@@ -1135,14 +1172,14 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                       {log.camera_name || "Main Camera"} {log.camera_location && `• ${log.camera_location}`}
                     </span>
                     {log.department && (
-                      <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", background: "#f1f5f9", padding: "2px 6px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-secondary)", background: "var(--bg-hover)", padding: "2px 6px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 3 }}>
                         <Building2 size={9} color="#475569" />
                         {log.department}
                       </span>
                     )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", display: "inline-flex", alignItems: "center", gap: 3 }}>
                       <Clock size={10} color="#64748b" />
                       {timeAgo(ts)}
                     </span>
@@ -1150,7 +1187,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                       <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "2px 7px", fontSize: 10, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                         <Trash2 size={11} color="#dc2626" />
                       </button>
-                      <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <button onClick={() => setSelectedLog(log)} style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
                         <Maximize2 size={11} color="#334155" />
                         Inspect
                       </button>
@@ -1164,7 +1201,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ width: "100%", height: "100%", background: "#f1f5f9" }} />
+                      <div style={{ width: "100%", height: "100%", background: "var(--bg-hover)" }} />
                     )}
                   </div>
 
@@ -1185,12 +1222,12 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                             </div>
                             <div>
                               <span style={{ fontSize: 8, color: "#4f46e5", fontWeight: 800, textTransform: "uppercase" }}>Enrolled Record</span>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>{log.person_name}</div>
-                              {log.employee_code && <div style={{ fontSize: 9.5, color: "#64748b", fontFamily: "'JetBrains Mono', monospace" }}>ID: {log.employee_code}</div>}
+                              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>{log.person_name}</div>
+                              {log.employee_code && <div style={{ fontSize: 9.5, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>ID: {log.employee_code}</div>}
                             </div>
                           </div>
                         ) : (
-                          <div style={{ fontSize: 11, color: "#64748b" }}>Matched gallery record: <strong>{log.person_name}</strong></div>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Matched gallery record: <strong>{log.person_name}</strong></div>
                         );
                       })()
                     ) : (
@@ -1210,10 +1247,10 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
         </div>
       ) : viewMode === "table" ? (
         /* MODE 3: HIGH-DENSITY TABULAR DATA TABLE VIEW */
-        <div style={{ background: "#ffffff", borderRadius: 12, border: "1px solid #cbd5e1", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 11.5 }}>
+        <div style={{ background: "var(--bg-card)", borderRadius: 12, border: "1px solid var(--border-strong)", overflowX: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", textAlign: "left", fontSize: 11.5 }}>
             <thead>
-              <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #cbd5e1", color: "#475569", fontWeight: 700, textTransform: "uppercase", fontSize: 9.5, letterSpacing: "0.04em" }}>
+              <tr style={{ background: "var(--bg-input)", borderBottom: "1.5px solid var(--border-strong)", color: "var(--text-secondary)", fontWeight: 700, textTransform: "uppercase", fontSize: 9.5, letterSpacing: "0.04em" }}>
                 <th style={{ padding: "10px 12px" }}>Face Crop</th>
                 <th style={{ padding: "10px 12px" }}>Person Name & ID</th>
                 <th style={{ padding: "10px 12px" }}>Status</th>
@@ -1231,21 +1268,21 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 const statusColor = isKnown ? (pct >= 70 ? "#059669" : pct >= 50 ? "#2563eb" : "#d97706") : "#dc2626";
 
                 return (
-                  <tr key={log.id} style={{ borderBottom: "1px solid #e2e8f0", background: idx % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+                  <tr key={log.id} style={{ borderBottom: "1px solid var(--border-strong)", background: idx % 2 === 0 ? "var(--bg-card)" : "var(--bg-input)" }}>
                     <td style={{ padding: "8px 12px" }}>
                       <div style={{ width: 38, height: 38, borderRadius: 8, overflow: "hidden", border: `1.5px solid ${statusColor}` }}>
                         {log.snapshot_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={log.snapshot_url} alt="Crop" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
-                          <div style={{ width: "100%", height: "100%", background: "#e2e8f0" }} />
+                          <div style={{ width: "100%", height: "100%", background: "var(--bg-hover)" }} />
                         )}
                       </div>
                     </td>
                     <td style={{ padding: "8px 12px" }}>
                       <div style={{ fontWeight: 800, color: statusColor, fontSize: 12 }}>{isKnown ? log.person_name : "Unknown Person"}</div>
-                      {log.employee_code && <div style={{ fontSize: 9.5, color: "#64748b", fontFamily: "'JetBrains Mono', monospace" }}>ID: {log.employee_code}</div>}
-                      {log.department && <div style={{ fontSize: 9, color: "#475569" }}>{log.department}</div>}
+                      {log.employee_code && <div style={{ fontSize: 9.5, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>ID: {log.employee_code}</div>}
+                      {log.department && <div style={{ fontSize: 9, color: "var(--text-secondary)" }}>{log.department}</div>}
                     </td>
                     <td style={{ padding: "8px 12px" }}>
                       <span style={{
@@ -1259,30 +1296,30 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                     </td>
                     <td style={{ padding: "8px 12px", width: 140 }}>
                       <div style={{ fontWeight: 700, color: statusColor, fontFamily: "'JetBrains Mono', monospace" }}>{pct}%</div>
-                      <div style={{ height: 4, background: "#e5e7eb", borderRadius: 2, marginTop: 3 }}>
+                      <div style={{ height: 4, background: "var(--bg-hover)", borderRadius: 2, marginTop: 3 }}>
                         <div style={{ height: "100%", width: `${pct}%`, background: statusColor, borderRadius: 2 }} />
                       </div>
                     </td>
                     <td style={{ padding: "8px 12px" }}>
-                      <div style={{ fontWeight: 700, color: "#334155", display: "flex", alignItems: "center", gap: 4 }}>
+                      <div style={{ fontWeight: 700, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 4 }}>
                         <Camera size={11} color="#64748b" />
                         {log.camera_name || "Main Camera"}
                       </div>
-                      <div style={{ fontSize: 9.5, color: "#64748b" }}>{log.camera_location || "Zone A"}</div>
+                      <div style={{ fontSize: 9.5, color: "var(--text-muted)" }}>{log.camera_location || "Zone A"}</div>
                     </td>
-                    <td style={{ padding: "8px 12px", fontFamily: "'JetBrains Mono', monospace", color: "#475569" }}>
+                    <td style={{ padding: "8px 12px", fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                         <Clock size={10} color="#64748b" />
                         {timeAgo(ts)}
                       </div>
-                      <div style={{ fontSize: 9, color: "#94a3b8" }}>{formatDate(ts)}</div>
+                      <div style={{ fontSize: 9, color: "var(--text-muted)" }}>{formatDate(ts)}</div>
                     </td>
                     <td style={{ padding: "8px 12px", textAlign: "right" }}>
                       <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                         <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "4px 8px", fontSize: 10.5, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                           <Trash2 size={11} color="#dc2626" />
                         </button>
-                        <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 6, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <button onClick={() => setSelectedLog(log)} style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 6, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
                           <Maximize2 size={11} color="#334155" />
                           Inspect
                         </button>
@@ -1299,7 +1336,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           {kanbanGroups.map(col => (
             <div key={col.id} style={{
-              background: "#ffffff", borderRadius: 14, border: `1.5px solid ${col.border}`,
+              background: "var(--bg-card)", borderRadius: 14, border: `1.5px solid ${col.border}`,
               overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: 600
             }}>
               {/* Kanban Column Header */}
@@ -1319,14 +1356,14 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               {/* Column Items Scrollable */}
               <div style={{ padding: 10, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
                 {col.items.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "20px 0", color: "#94a3b8", fontSize: 11 }}>No items in lane</div>
+                  <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-muted)", fontSize: 11 }}>No items in lane</div>
                 ) : (
                   col.items.map(log => {
                     const ts = log.timestamp || log.created_at;
                     return (
                       <div key={log.id} style={{
-                        background: "#ffffff", borderRadius: 10, padding: 10,
-                        border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+                        background: "var(--bg-card)", borderRadius: 10, padding: 10,
+                        border: "1px solid var(--border-strong)", boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
                       }}>
                         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6 }}>
                           <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", border: `1.5px solid ${col.color}`, flexShrink: 0 }}>
@@ -1334,18 +1371,18 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={log.snapshot_url} alt="Live" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             ) : (
-                              <div style={{ width: "100%", height: "100%", background: "#e2e8f0" }} />
+                              <div style={{ width: "100%", height: "100%", background: "var(--bg-hover)" }} />
                             )}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 800, fontSize: 12, color: col.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {log.person_name}
                             </div>
-                            <div style={{ fontSize: 9.5, color: "#64748b", display: "flex", alignItems: "center", gap: 3 }}>
+                            <div style={{ fontSize: 9.5, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 3 }}>
                               <Camera size={10} color="#64748b" />
                               {log.camera_name || "Camera"}
                             </div>
-                            <div style={{ fontSize: 9, color: "#94a3b8", fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 3 }}>
+                            <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace", display: "flex", alignItems: "center", gap: 3 }}>
                               <Clock size={9} color="#94a3b8" />
                               {timeAgo(ts)}
                             </div>
@@ -1358,7 +1395,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                           <button onClick={(e) => handleDeleteSingleLog(log.id, e)} title="Delete this log record" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 5, padding: "2px 7px", fontSize: 9.5, fontWeight: 700, color: "#dc2626", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                             <Trash2 size={10} color="#dc2626" />
                           </button>
-                          <button onClick={() => setSelectedLog(log)} style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 5, padding: "2px 8px", fontSize: 9.5, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                          <button onClick={() => setSelectedLog(log)} style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", borderRadius: 5, padding: "2px 8px", fontSize: 9.5, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
                             <Maximize2 size={10} color="#334155" />
                             Inspect
                           </button>
@@ -1375,13 +1412,13 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
 
       {/* 6. Pagination Controls Footer (for Cards, List, Table views) */}
       {viewMode !== "kanban" && viewMode !== "calendar" && filteredAndSortedLogs.length > pageSize && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, paddingTop: 12, borderTop: "1px solid #e2e8f0", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border-strong)", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
             <span>Per page:</span>
             <select
               value={pageSize}
               onChange={e => setPageSize(Number(e.target.value))}
-              style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11 }}
+              style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border-strong)", fontSize: 11 }}
             >
               <option value={12}>12</option>
               <option value={24}>24</option>
@@ -1394,8 +1431,8 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               style={{
-                padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1",
-                background: currentPage === 1 ? "#f1f5f9" : "#ffffff",
+                padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-strong)",
+                background: currentPage === 1 ? "var(--bg-hover)" : "var(--bg-card)",
                 color: currentPage === 1 ? "#94a3b8" : "#334155",
                 cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700,
                 display: "inline-flex", alignItems: "center", gap: 4
@@ -1404,15 +1441,15 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               <ChevronLeft size={12} />
               Previous
             </button>
-            <span style={{ fontSize: 11, color: "#334155", fontWeight: 700, padding: "0 6px" }}>
+            <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700, padding: "0 6px" }}>
               {currentPage} / {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
               style={{
-                padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1",
-                background: currentPage === totalPages ? "#f1f5f9" : "#ffffff",
+                padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border-strong)",
+                background: currentPage === totalPages ? "var(--bg-hover)" : "var(--bg-card)",
                 color: currentPage === totalPages ? "#94a3b8" : "#334155",
                 cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700,
                 display: "inline-flex", alignItems: "center", gap: 4
@@ -1436,16 +1473,16 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
         onClick={() => setSelectedLog(null)}
         >
           <div style={{
-            background: "#ffffff", borderRadius: 16, width: "100%", maxWidth: 560,
+            background: "var(--bg-panel)", borderRadius: 16, width: "100%", maxWidth: 560,
             maxHeight: "90vh", overflowY: "auto", padding: 24, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)"
           }}
           onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid var(--border-strong)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <ShieldAlert size={20} color="#0f172a" />
-                <span style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>Database Log Record</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>Database Log Record</span>
                 <span style={{
                   fontSize: 10, fontWeight: 700,
                   color: selectedLog.person_name !== "Unknown" ? "#059669" : "#dc2626",
@@ -1457,77 +1494,77 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               </div>
               <button
                 onClick={() => setSelectedLog(null)}
-                style={{ background: "#f1f5f9", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ background: "var(--bg-hover)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
                 <X size={14} color="#64748b" />
               </button>
             </div>
 
             {/* Images side-by-side enlarged */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, background: "#f8fafc", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, background: "var(--bg-input)", padding: 12, borderRadius: 12, border: "1px solid var(--border-strong)" }}>
               <div>
-                <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
                   Live Snapshot Crop
                 </span>
                 {selectedLog.snapshot_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedLog.snapshot_url} alt="Live" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, border: "2px solid #cbd5e1" }} />
+                  <img src={selectedLog.snapshot_url} alt="Live" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, border: "2px solid var(--border-strong)" }} />
                 ) : (
-                  <div style={{ width: "100%", height: 140, borderRadius: 8, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 11 }}>No Live Crop</div>
+                  <div style={{ width: "100%", height: 140, borderRadius: 8, background: "var(--bg-hover)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 11 }}>No Live Crop</div>
                 )}
               </div>
 
               <div>
-                <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
                   Enrolled Gallery Reference
                 </span>
                 {selectedLog.registered_photo || faces.find(f => f.name.toLowerCase() === selectedLog.person_name.toLowerCase())?.photo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={selectedLog.registered_photo || faces.find(f => f.name.toLowerCase() === selectedLog.person_name.toLowerCase())?.photo_url} alt="Enrolled" style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 8, border: "2px solid #6366f1" }} />
                 ) : (
-                  <div style={{ width: "100%", height: 140, borderRadius: 8, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 11 }}>No Enrolled Photo</div>
+                  <div style={{ width: "100%", height: 140, borderRadius: 8, background: "var(--bg-hover)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 11 }}>No Enrolled Photo</div>
                 )}
               </div>
             </div>
 
             {/* Field Details Table */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
-                <span style={{ color: "#64748b", fontWeight: 600 }}>Log Database ID:</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "#0f172a" }}>{selectedLog.id}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-input)", borderRadius: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Log Database ID:</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "var(--text-primary)" }}>{selectedLog.id}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
-                <span style={{ color: "#64748b", fontWeight: 600 }}>Person Name:</span>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-card)", borderRadius: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Person Name:</span>
                 <span style={{ fontWeight: 800, color: selectedLog.person_name !== "Unknown" ? "#059669" : "#dc2626" }}>{selectedLog.person_name}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
-                <span style={{ color: "#64748b", fontWeight: 600 }}>Match Confidence:</span>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-input)", borderRadius: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Match Confidence:</span>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: "#4f46e5" }}>{Math.round(selectedLog.confidence * 100)}% ({selectedLog.confidence.toFixed(4)})</span>
               </div>
               {selectedLog.det_score !== undefined && (
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
-                  <span style={{ color: "#64748b", fontWeight: 600 }}>YOLO / InsightFace Det Score:</span>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-card)", borderRadius: 6 }}>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>YOLO / InsightFace Det Score:</span>
                   <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{Math.round(selectedLog.det_score * 100)}%</span>
                 </div>
               )}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
-                <span style={{ color: "#64748b", fontWeight: 600 }}>Camera Name / Location:</span>
-                <span style={{ fontWeight: 700, color: "#0f172a" }}>{selectedLog.camera_name} ({selectedLog.camera_location})</span>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-input)", borderRadius: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Camera Name / Location:</span>
+                <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{selectedLog.camera_name} ({selectedLog.camera_location})</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
-                <span style={{ color: "#64748b", fontWeight: 600 }}>Exact Supabase Timestamp:</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#334155" }}>{formatDate(selectedLog.timestamp || selectedLog.created_at)}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-card)", borderRadius: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Exact Supabase Timestamp:</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-secondary)" }}>{formatDate(selectedLog.timestamp || selectedLog.created_at)}</span>
               </div>
               {selectedLog.department && (
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#f8fafc", borderRadius: 6 }}>
-                  <span style={{ color: "#64748b", fontWeight: 600 }}>Department / Group:</span>
-                  <span style={{ fontWeight: 700, color: "#334155" }}>{selectedLog.department}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-input)", borderRadius: 6 }}>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Department / Group:</span>
+                  <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{selectedLog.department}</span>
                 </div>
               )}
               {selectedLog.employee_code && (
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "#ffffff", borderRadius: 6 }}>
-                  <span style={{ color: "#64748b", fontWeight: 600 }}>Employee / Person ID:</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "#334155" }}>{selectedLog.employee_code}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", background: "var(--bg-card)", borderRadius: 6 }}>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Employee / Person ID:</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: "var(--text-secondary)" }}>{selectedLog.employee_code}</span>
                 </div>
               )}
             </div>
@@ -1544,7 +1581,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button
                   onClick={() => copyToClipboard(selectedLog.id, "id")}
-                  style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                  style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
                   {copiedField === "id" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
                   {copiedField === "id" ? "Copied ID!" : "Copy Log ID"}
@@ -1552,7 +1589,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 {selectedLog.snapshot_url && (
                   <button
                     onClick={() => copyToClipboard(selectedLog.snapshot_url!, "url")}
-                    style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#334155", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    style={{ background: "var(--bg-hover)", border: "1px solid var(--border-strong)", padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                   >
                     {copiedField === "url" ? <Check size={12} color="#059669" /> : <Copy size={12} color="#334155" />}
                     {copiedField === "url" ? "Copied Link!" : "Copy Snapshot Link"}
@@ -1560,7 +1597,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
                 )}
                 <button
                   onClick={() => setSelectedLog(null)}
-                  style={{ background: "#0f172a", color: "#ffffff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                  style={{ background: "var(--bg-sidebar)", color: "var(--text-primary)", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                 >
                   Close Details
                 </button>
@@ -1575,6 +1612,19 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.4; transform: scale(1.2); }
+        }
+        .log-panel-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .log-panel-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .log-panel-scroll::-webkit-scrollbar-thumb {
+          background: var(--border-strong);
+          border-radius: 3px;
+        }
+        .log-panel-scroll::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
         }
       `}</style>
     </div>

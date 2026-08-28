@@ -38,20 +38,20 @@ interface Employee {
 }
 
 // ---- Design tokens (kept local to this file, no functional impact) ----
-const INK = "#101B22";
-const MUTED = "#6B6558";
-const PAPER = "#F7F5F0";
-const BORDER = "#E4E0D6";
+const INK = "var(--text-primary)";
+const MUTED = "var(--text-secondary)";
+const PAPER = "var(--bg-card)";
+const BORDER = "var(--border-strong)";
 const TEAL = "#1F6F5C";
 const TEAL_DEEP = "#164F42";
 const AMBER = "#C9762C";
 const RUST = "#B3432B";
 
 const fieldClass =
-  "w-full bg-[#F7F5F0] border border-[#E4E0D6] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[#101B22] outline-none transition-colors duration-150 focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10 placeholder:text-[#B0A996]";
+  "w-full bg-[var(--bg-input)] border border-[var(--border-strong)] rounded-xl px-3.5 py-2.5 text-[13.5px] text-[var(--text-primary)] outline-none transition-colors duration-150 focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10 placeholder:text-[var(--text-muted)]";
 
 const labelClass =
-  "block text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[#8A8375] mb-2";
+  "block text-[10.5px] font-semibold uppercase tracking-[0.09em] text-[var(--text-muted)] mb-2";
 
 function Stat({
   label,
@@ -67,7 +67,7 @@ function Stat({
       <span className="erg-font-display text-[19px] font-bold" style={{ color }}>
         {value}
       </span>
-      <span className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#9C9585]">
+      <span className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
         {label}
       </span>
     </div>
@@ -438,7 +438,7 @@ export default function EmployeesPage() {
         </div>
 
         <div
-          className="flex items-center gap-5 rounded-2xl px-6 py-3.5 bg-white"
+          className="flex items-center gap-5 rounded-2xl px-6 py-3.5 bg-[var(--bg-panel)]"
           style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,27,34,0.04)" }}
         >
           <Stat label="Enrolled" value={employees.length} />
@@ -451,7 +451,7 @@ export default function EmployeesPage() {
 
       {/* ---------------- Toolbar ---------------- */}
       <div
-        className="bg-white rounded-2xl p-4 flex flex-wrap gap-4 items-center mb-6"
+        className="bg-[var(--bg-panel)] rounded-2xl p-4 flex flex-wrap gap-4 items-center mb-6"
         style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,27,34,0.03)" }}
       >
         <div className="flex flex-wrap items-center gap-2.5">
@@ -477,7 +477,7 @@ export default function EmployeesPage() {
               setBulkResult(null);
               setShowBulkModal(true);
             }}
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition-all hover:bg-[#F7F5F0]"
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition-all hover:bg-[var(--bg-hover)]"
             style={{ border: `1px solid ${BORDER}`, color: INK }}
           >
             <Upload size={15} style={{ color: TEAL }} />
@@ -497,7 +497,7 @@ export default function EmployeesPage() {
 
         {/* Search */}
         <div className="relative flex-1 min-w-[260px]">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#A9A192" }} />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
           <input
             type="text"
             placeholder="Search by name, employee code, or department…"
@@ -509,14 +509,14 @@ export default function EmployeesPage() {
 
         {/* Department Filter */}
         <div className="flex items-center gap-2.5">
-          <Filter size={14} style={{ color: "#A9A192" }} />
+          <Filter size={14} style={{ color: "var(--text-muted)" }} />
           <span className="text-[13px] font-semibold" style={{ color: MUTED }}>
             Department
           </span>
           <select
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
-            className="bg-[#F7F5F0] rounded-xl px-3.5 py-2.5 text-[13.5px] outline-none cursor-pointer transition-colors focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10"
+            className="bg-[var(--bg-input)] rounded-xl px-3.5 py-2.5 text-[13.5px] outline-none cursor-pointer transition-colors focus:border-[#1F6F5C] focus:ring-4 focus:ring-[#1F6F5C]/10"
             style={{ border: `1px solid ${BORDER}`, color: INK }}
           >
             <option value="All">All Departments</option>
@@ -532,7 +532,7 @@ export default function EmployeesPage() {
         <button
           onClick={fetchEmployees}
           title="Reload registry"
-          className="rounded-xl w-10 h-10 flex items-center justify-center transition-colors hover:bg-[#F7F5F0] focus:outline-none focus-visible:ring-4"
+          className="rounded-xl w-10 h-10 flex items-center justify-center transition-colors hover:bg-[var(--bg-hover)] focus:outline-none focus-visible:ring-4"
           style={{ border: `1px solid ${BORDER}`, color: MUTED }}
         >
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -547,7 +547,7 @@ export default function EmployeesPage() {
         </div>
       ) : error ? (
         <div
-          className="flex flex-col items-center gap-3 py-14 px-5 rounded-2xl bg-white"
+          className="flex flex-col items-center gap-3 py-14 px-5 rounded-2xl bg-[var(--bg-panel)]"
           style={{ color: RUST, border: `1px solid ${BORDER}` }}
         >
           <AlertTriangle size={30} />
@@ -562,7 +562,7 @@ export default function EmployeesPage() {
         </div>
       ) : filteredEmployees.length === 0 ? (
         <div
-          className="text-center py-20 px-6 bg-white rounded-2xl"
+          className="text-center py-20 px-6 bg-[var(--bg-panel)] rounded-2xl"
           style={{ border: `1px solid ${BORDER}`, color: MUTED, boxShadow: "0 1px 3px rgba(16,27,34,0.03)" }}
         >
           <User size={44} className="mx-auto mb-4" style={{ opacity: 0.22 }} />
@@ -576,11 +576,11 @@ export default function EmployeesPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))" }}>
+        <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(310px, 100%), 1fr))" }}>
           {filteredEmployees.map((emp) => (
             <div
               key={emp.id}
-              className="erg-card group bg-white rounded-2xl overflow-hidden flex flex-col relative transition-shadow duration-200 hover:shadow-[0_10px_28px_rgba(16,27,34,0.09)]"
+              className="erg-card group bg-[var(--bg-panel)] rounded-2xl overflow-hidden flex flex-col relative transition-shadow duration-200 hover:shadow-[0_10px_28px_rgba(16,27,34,0.09)]"
               style={{ border: `1px solid ${BORDER}` }}
             >
               {/* accent strip */}
@@ -609,9 +609,9 @@ export default function EmployeesPage() {
               </button>
 
               {/* Card top */}
-              <div className="p-5 pl-6 flex items-center gap-4" style={{ borderBottom: `1px solid #F1EEE6` }}>
+              <div className="p-5 pl-6 flex items-center gap-4" style={{ borderBottom: `1px solid var(--border)` }}>
                 <div
-                  className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#F7F5F0]"
+                  className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[var(--bg-input)]"
                   style={{ border: `1px solid ${BORDER}` }}
                 >
                   {emp.photo_url ? (
@@ -647,21 +647,21 @@ export default function EmployeesPage() {
 
               {/* Card body */}
               <div className="p-5 pl-6 flex-1 flex flex-col gap-2.5">
-                <div className="flex items-center gap-2.5 text-[13px]" style={{ color: "#374151" }}>
-                  <Building size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                <div className="flex items-center gap-2.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
+                  <Building size={14} style={{ color: "var(--text-muted)" }} className="flex-shrink-0" />
                   <span className="font-semibold">{emp.department || "No department"}</span>
-                  <span style={{ color: BORDER }}>•</span>
-                  <Briefcase size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                  <span style={{ color: "var(--text-muted)" }}>•</span>
+                  <Briefcase size={14} style={{ color: "var(--text-muted)" }} className="flex-shrink-0" />
                   <span>{emp.designation || "No designation"}</span>
                 </div>
 
                 <div className="flex items-center gap-2.5 text-[12.5px] min-w-0" style={{ color: MUTED }}>
-                  <Mail size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                  <Mail size={14} style={{ color: "var(--text-muted)" }} className="flex-shrink-0" />
                   <span className="text-ellipsis overflow-hidden whitespace-nowrap">{emp.email || "N/A"}</span>
                 </div>
 
                 <div className="flex items-center gap-2.5 text-[12.5px]" style={{ color: MUTED }}>
-                  <Phone size={14} style={{ color: "#A9A192" }} className="flex-shrink-0" />
+                  <Phone size={14} style={{ color: "var(--text-muted)" }} className="flex-shrink-0" />
                   <span>{emp.mobile || "N/A"}</span>
                 </div>
               </div>
@@ -669,9 +669,9 @@ export default function EmployeesPage() {
               {/* Card footer */}
               <div
                 className="px-5 pl-6 py-3 flex justify-between items-center"
-                style={{ borderTop: "1px solid #F1EEE6", background: "#FBFAF7" }}
+                style={{ borderTop: "1px solid var(--border)", background: "var(--bg-input)" }}
               >
-                <span className="text-[10.5px] font-medium" style={{ color: "#B0A996" }}>
+                <span className="text-[10.5px] font-medium" style={{ color: "var(--text-muted)" }}>
                   Registered {emp.created_at ? new Date(emp.created_at).toLocaleDateString("en-IN") : "N/A"}
                 </span>
 
@@ -708,7 +708,7 @@ export default function EmployeesPage() {
             onClick={closeForm}
           />
           <div
-            className="erg-drawer fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-white z-[100] flex flex-col"
+            className="erg-drawer fixed top-0 right-0 bottom-0 w-full sm:w-[480px] bg-[var(--bg-panel)] z-[100] flex flex-col"
             style={{ boxShadow: "-10px 0 40px rgba(16,27,34,0.14)", borderLeft: `1px solid ${BORDER}` }}
           >
             {/* Header */}
@@ -726,8 +726,8 @@ export default function EmployeesPage() {
               </div>
               <button
                 onClick={closeForm}
-                className="rounded-full w-8 h-8 flex items-center justify-center transition-colors hover:bg-[#F1EEE6]"
-                style={{ background: "#F7F5F0", color: MUTED }}
+                className="rounded-full w-8 h-8 flex items-center justify-center transition-colors hover:bg-[var(--border)]"
+                style={{ background: "var(--bg-input)", color: MUTED }}
               >
                 <X size={16} />
               </button>
@@ -741,7 +741,7 @@ export default function EmployeesPage() {
                   <label className={labelClass}>Face Image Capture *</label>
 
                   <div
-                    className="w-full rounded-2xl overflow-hidden relative flex items-center justify-center bg-[#F7F5F0]"
+                    className="w-full rounded-2xl overflow-hidden relative flex items-center justify-center bg-[var(--bg-input)]"
                     style={{ aspectRatio: "4/3", border: `1px dashed ${BORDER}` }}
                   >
                     {cameraActive ? (
@@ -773,7 +773,7 @@ export default function EmployeesPage() {
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-3 p-5 text-center">
-                        <Camera size={30} style={{ color: "#A9A192" }} />
+                        <Camera size={30} style={{ color: "var(--text-muted)" }} />
                         <div>
                           <p className="text-[12px] font-semibold mb-0.5" style={{ color: INK }}>
                             Take a face image
@@ -795,8 +795,8 @@ export default function EmployeesPage() {
                           <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-[#F1EEE6]"
-                            style={{ background: "#F7F5F0", border: `1px solid ${BORDER}`, color: INK }}
+                            className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold transition-colors hover:bg-[var(--border)]"
+                            style={{ background: "var(--bg-input)", border: `1px solid ${BORDER}`, color: INK }}
                           >
                             <Upload size={13} />
                             Upload File
@@ -900,7 +900,7 @@ export default function EmployeesPage() {
                 {/* Status Toggle */}
                 <label
                   htmlFor="isActiveToggle"
-                  className="flex items-center gap-3 mt-1 rounded-xl px-3.5 py-3 cursor-pointer transition-colors hover:bg-[#F7F5F0]"
+                  className="flex items-center gap-3 mt-1 rounded-xl px-3.5 py-3 cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
                   style={{ border: `1px solid ${BORDER}` }}
                 >
                   <input
@@ -942,8 +942,8 @@ export default function EmployeesPage() {
                   <button
                     type="button"
                     onClick={closeForm}
-                    className="flex-1 rounded-xl py-3 text-[13.5px] font-bold transition-colors hover:bg-[#F1EEE6]"
-                    style={{ background: "#F7F5F0", border: `1px solid ${BORDER}`, color: "#374151" }}
+                    className="flex-1 rounded-xl py-3 text-[13.5px] font-bold transition-colors hover:bg-[var(--border)]"
+                    style={{ background: "var(--bg-input)", border: `1px solid ${BORDER}`, color: "var(--text-secondary)" }}
                   >
                     Cancel
                   </button>
@@ -975,7 +975,7 @@ export default function EmployeesPage() {
       {/* ---------------- Create Dynamic Department Modal ---------------- */}
       {showDeptModal && (
         <div className="erg-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" style={{ border: `1px solid ${BORDER}` }}>
+          <div className="bg-[var(--bg-panel)] rounded-2xl p-6 w-full max-w-md shadow-2xl" style={{ border: `1px solid ${BORDER}` }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="erg-font-display text-[17px] font-bold" style={{ color: INK }}>
                 Add Dynamic Department
@@ -983,7 +983,7 @@ export default function EmployeesPage() {
               <button
                 type="button"
                 onClick={() => setShowDeptModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               >
                 <X size={18} />
               </button>
@@ -1024,7 +1024,7 @@ export default function EmployeesPage() {
                 <button
                   type="button"
                   onClick={() => setShowDeptModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border text-[13px] font-bold text-gray-700 hover:bg-gray-50"
+                  className="flex-1 py-2.5 rounded-xl border text-[13px] font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
                 >
                   Cancel
                 </button>
@@ -1045,8 +1045,8 @@ export default function EmployeesPage() {
       {/* ---------------- Bulk HRMS Import Modal ---------------- */}
       {showBulkModal && (
         <div className="erg-backdrop fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/45">
-          <div className="bg-white rounded-3xl p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col" style={{ border: `1px solid ${BORDER}` }}>
-            <div className="flex items-center justify-between pb-4 border-b border-[#E4E0D6] mb-4">
+          <div className="bg-[var(--bg-panel)] rounded-3xl p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col" style={{ border: `1px solid ${BORDER}` }}>
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--border-strong)] mb-4">
               <div>
                 <h3 className="erg-font-display text-[18px] font-bold" style={{ color: INK }}>
                   HRMS Bulk Employee Integration
@@ -1058,7 +1058,7 @@ export default function EmployeesPage() {
               <button
                 type="button"
                 onClick={() => setShowBulkModal(false)}
-                className="text-gray-400 hover:text-gray-600 rounded-full p-1"
+                className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] rounded-full p-1"
               >
                 <X size={20} />
               </button>
@@ -1066,12 +1066,12 @@ export default function EmployeesPage() {
 
             <div className="flex-1 overflow-y-auto space-y-5">
               {/* Endpoint Documentation Box */}
-              <div className="rounded-2xl p-4 bg-[#F7F5F0] border border-[#E4E0D6] space-y-2 text-[12.5px]">
+              <div className="rounded-2xl p-4 bg-[var(--bg-input)] border border-[var(--border-strong)] space-y-2 text-[12.5px]">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[11px] uppercase tracking-wide" style={{ color: TEAL }}>
                     HRMS Direct Integration Endpoint
                   </span>
-                  <span className="erg-font-mono text-[10.5px] px-2 py-0.5 rounded bg-white border border-[#E4E0D6]" style={{ color: TEAL_DEEP }}>
+                  <span className="erg-font-mono text-[10.5px] px-2 py-0.5 rounded bg-[var(--bg-panel)] border border-[var(--border-strong)]" style={{ color: TEAL_DEEP }}>
                     POST /api/hrms/bulk_register
                   </span>
                 </div>
@@ -1120,7 +1120,7 @@ export default function EmployeesPage() {
                   <button
                     type="button"
                     onClick={() => setShowBulkModal(false)}
-                    className="flex-1 py-3 rounded-xl border text-[13.5px] font-bold text-gray-700 hover:bg-gray-50"
+                    className="flex-1 py-3 rounded-xl border text-[13.5px] font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
                   >
                     Close
                   </button>

@@ -1,0 +1,14 @@
+# go2rtc relay configuration — deploy on a host that CAN reach the cameras
+# (e.g. the DB server 172.30.0.200). Cameras flagged "via_relay" in the VMS
+# are registered here dynamically through the HTTP API by the backend.
+
+api:
+  listen: ":1984"        # HTTP API + web UI  → http://<host>:1984
+rtsp:
+  listen: ":8554"        # RTSP restreams     → rtsp://<host>:8554/<camera_id>
+webrtc:
+  listen: ":8555/tcp"    # optional low-latency preview
+
+log:
+  level: info
+streams: {}              # managed automatically by the VMS backend — do not hand-edit

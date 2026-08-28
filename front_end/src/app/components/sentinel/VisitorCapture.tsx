@@ -43,7 +43,7 @@ const T = {
 const chipBtn: React.CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 6,
   padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.lineStrong}`,
-  background: "#fff", color: T.text, fontSize: 12, fontWeight: 700,
+  background: "var(--bg-card)", color: T.text, fontSize: 12, fontWeight: 700,
   cursor: "pointer", fontFamily: "inherit", transition: "all .18s ease",
 };
 const chipActive: React.CSSProperties = {
@@ -166,7 +166,7 @@ export default function VisitorCapture({ onPhoto, canCapture = false, captureFra
   const playFeed = (camId: string) => {
     stopFeed();
     setFeedState("connecting");
-    const url = `http://${hostname()}:8888/${camId}/index.m3u8`;
+    const url = `http://${hostname()}:8892/${camId}/index.m3u8`;
     const v = videoRef.current;
     if (!v) return;
     if (Hls.isSupported()) {
@@ -463,7 +463,7 @@ export default function VisitorCapture({ onPhoto, canCapture = false, captureFra
             <>
               {/* Live feed + detection overlay */}
               <div style={{
-                position: "relative", borderRadius: 14, overflow: "hidden", background: "#05070d",
+                position: "relative", borderRadius: 14, overflow: "hidden", background: "var(--bg-deep)",
                 aspectRatio: vidW && vidH ? `${vidW}/${vidH}` : "16/9", border: `1px solid ${T.line}`,
               }}>
                 <video ref={videoRef} autoPlay muted playsInline
@@ -638,7 +638,7 @@ export default function VisitorCapture({ onPhoto, canCapture = false, captureFra
           padding: 20,
         }} onClick={() => { setCapturedFrame(null); setCropDims(null); }}>
           <div style={{
-            background: "#fff", borderRadius: 18, padding: 20, maxWidth: 640, width: "100%",
+            background: "var(--bg-card)", borderRadius: 18, padding: 20, maxWidth: 640, width: "100%",
             boxShadow: "0 25px 60px rgba(0,0,0,0.3)", color: T.text,
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -671,7 +671,7 @@ export default function VisitorCapture({ onPhoto, canCapture = false, captureFra
               style={{
                 position: "relative", width: "100%", borderRadius: 10, overflow: "hidden",
                 aspectRatio: cropDims ? `${cropDims.iw}/${cropDims.ih}` : "16/9",
-                background: "#05070d", touchAction: "none", userSelect: "none",
+                background: "var(--bg-deep)", touchAction: "none", userSelect: "none",
                 cursor: "crosshair",
               }}
             >

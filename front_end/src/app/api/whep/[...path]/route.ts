@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import http from "http";
 
 const MEDIAMTX_HOST = "127.0.0.1";
-const MEDIAMTX_PORT = 8889;
+const MEDIAMTX_PORT = 8891;
 
 /** Headers that are hop-by-hop and must NOT be forwarded. */
 const DROP_REQ = new Set([

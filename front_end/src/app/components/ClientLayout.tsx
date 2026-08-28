@@ -6,18 +6,21 @@ import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import LoadingScreen from "./LoadingScreen";
 import { AuthProvider, useAuth } from "./AuthProvider";
+import { ThemeProvider } from "./ThemeProvider";
 
 /* ── Inner layout (reads auth context) ──────────────────────────────────── */
 function InnerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try { return localStorage.getItem("snt-sidebar-collapsed") === "1"; } catch { return false; }
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const collapsedRef = useRef(sidebarCollapsed);
+
+  useEffect(() => {
+    try { setSidebarCollapsed(localStorage.getItem("snt-sidebar-collapsed") === "1"); } catch {}
+  }, []);
+
   useEffect(() => { collapsedRef.current = sidebarCollapsed; }, [sidebarCollapsed]);
 
   // Auto-adaptive sidebar:
@@ -78,7 +81,8 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
           onClick={closeSidebar}
           style={{
             position: "fixed", inset: 0, zIndex: 45,
-            background: "rgba(15, 23, 42, 0.45)",
+            background: "var(--bg-deep)",
+            opacity: 0.45,
             backdropFilter: "blur(4px)",
             transition: "opacity 0.25s ease",
           }}
@@ -90,8 +94,8 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
         <div style={{
           width: 260, height: "100vh",
           position: "fixed", top: 0, left: 0,
-          background: "#ffffff",
-          borderRight: "1px solid rgba(0,0,0,0.06)",
+          background: "var(--bg-sidebar)",
+          borderRight: "1px solid var(--border)",
         }} />
       }>
         <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
@@ -117,7 +121,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
           style={{
             flex: 1,
             background: "transparent",
-            padding: "18px 28px 24px 28px",
+            padding: "18px 24px 24px 24px",
             overflowY: "auto",
           }}
         >
@@ -138,7 +142,12 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
             margin-left: 0 !important;
           }
           .main-content-body {
-            padding: 0px 16px 20px 16px !important;
+            padding: 12px 16px 20px 16px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .main-content-body {
+            padding: 8px 12px 16px 12px !important;
           }
         }
       `}</style>
@@ -149,8 +158,10 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
 /* ── Exported wrapper (provides auth context to entire app) ──────────────── */
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
-      <InnerLayout>{children}</InnerLayout>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <InnerLayout>{children}</InnerLayout>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

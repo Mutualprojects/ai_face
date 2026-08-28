@@ -5,7 +5,7 @@ import {
   User, Phone, Building2, CreditCard, Camera, Upload, PenLine,
   Check, ChevronLeft, ChevronRight, Search, RotateCcw, Loader2,
   LayoutGrid, List, Kanban, Table, Filter, Clock, CheckCircle2, UserX, X,
-  Video, Scissors, RefreshCw, ChevronDown, Image as ImageIcon
+  Video, Scissors, RefreshCw, ChevronDown, Image as ImageIcon, AlertCircle
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -90,7 +90,7 @@ function Barcode() {
   return (
     <div style={{ display: "flex", height: 22, gap: "1px", alignItems: "stretch", width: "100%", opacity: 0.65, marginTop: 12 }}>
       {[2, 1, 3, 2, 1, 4, 2, 1, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 3, 2, 1, 2].map((w, idx) => (
-        <div key={idx} style={{ flexGrow: w, background: "#1E1B4B" }} />
+        <div key={idx} style={{ flexGrow: w, background: "var(--violet-deep)" }} />
       ))}
     </div>
   );
@@ -453,7 +453,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     const video = videoRef.current;
     if (!video) return;
 
-    const hlsUrl = `${window.location.protocol}//${window.location.hostname}:8888/${camId}/index.m3u8`;
+    const hlsUrl = `${window.location.protocol}//${window.location.hostname}:8892/${camId}/index.m3u8`;
 
     if (Hls.isSupported()) {
       const hls = new Hls({
@@ -933,7 +933,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
 
   const renderToolbar = () => (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-      <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 300 }}>
+      <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 220, flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: 1, maxWidth: 300 }}>
           <Search size={14} color={T.textMuted} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
           <input
@@ -1421,235 +1421,152 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
               {step === 3 && (
                 <div className="vr-fade" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <Field label="Photo" required>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, width: "100%" }}>
                       {photo ? (
                         <>
                           <div style={{
                             width: 180, height: 180, borderRadius: "50%", overflow: "hidden",
-                            background: T.bgField, border: `2.5px solid ${T.accent}`,
-                            boxShadow: "0 12px 28px rgba(79,70,229,0.18)",
+                            background: T.bgField, border: `3px solid ${T.ok}`,
+                            boxShadow: "0 12px 28px rgba(16,185,129,0.2)",
                             display: "flex", alignItems: "center", justifyContent: "center",
+                            position: "relative"
                           }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={photo} alt="Visitor" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: T.ok, display: "flex", alignItems: "center", gap: 4 }}>
+                            <CheckCircle2 size={13} /> Photo Captured & Verified
+                          </span>
                           <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                            <button className="vr-btn" onClick={() => setPhoto(null)} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
-                              <RotateCcw size={13} /> Retake
+                            <button className="vr-btn" onClick={resetPhotoSelection} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                              <RotateCcw size={13} /> Change Photo / Retake
                             </button>
                             <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
-                              <Upload size={13} /> Upload Photo
+                              <Upload size={13} /> Upload File
                             </button>
                           </div>
                         </>
-                      ) : (
-                        <>
-                          <div style={{ display: "flex", gap: 10, width: "100%", justifyContent: "center", marginBottom: 12 }}>
-                            <select
-                              value={cameraMode}
-                              onChange={(e) => setCameraMode(e.target.value as CameraMode)}
-                              style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${T.line}`, background: T.bgField, color: T.text, fontSize: 13 }}
-                            >
-                              <option value="webcam">Webcam</option>
-                              <option value="rtsp">IP Camera</option>
-                            </select>
-                            {cameraMode === "rtsp" && (
-                              <select
-                                value={selectedRtspCam?.id || ""}
-                                onChange={(e) => {
-                                  const cam = rtspCameras.find(c => c.id === e.target.value);
-                                  if (cam) setSelectedRtspCam(cam);
-                                }}
-                                style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${T.line}`, background: T.bgField, color: T.text, fontSize: 13, maxWidth: 150 }}
-                              >
-                                {rtspCameras.map(cam => (
-                                  <option key={cam.id} value={cam.id}>
-                                    {cam.name}{readySet.size && !readySet.has(cam.id) ? " · offline" : ""}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
+                      ) : isCropMode && capturedRawFrame ? (
+                        /* ── Interactive Face Crop Mode ── */
+                        <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                          <div style={{
+                            position: "relative", width: "100%", maxWidth: 440, height: 260,
+                            borderRadius: 12, overflow: "hidden", border: `2px solid ${T.accent}`,
+                            background: "var(--bg-sidebar)", display: "flex", alignItems: "center", justifyContent: "center",
+                            boxShadow: "0 8px 20px rgba(0,0,0,0.15)"
+                          }}>
+                            <canvas
+                              ref={cropCanvasRef}
+                              onMouseDown={handleCropPointerDown}
+                              onMouseMove={handleCropPointerMove}
+                              onMouseUp={handleCropPointerUp}
+                              onTouchStart={handleCropPointerDown}
+                              onTouchMove={handleCropPointerMove}
+                              onTouchEnd={handleCropPointerUp}
+                              style={{ width: "100%", height: "100%", objectFit: "contain", cursor: "crosshair", display: "block" }}
+                            />
                           </div>
-                          {/* ── IP Camera Mode ── */}
-                          {cameraMode === "rtsp" ? ((() => {
-                            // ── helpers (defined inline to close over state setters) ──
-                            const stopLiveFeed = () => {
-                              if (livePollingRef.current) {
-                                clearInterval(livePollingRef.current);
-                                livePollingRef.current = null;
-                              }
-                              setIsLiveStreaming(false);
-                              setIpCamOpen(false);
-                            };
+                          <p style={{ fontSize: 11.5, color: T.textMuted, margin: 0, textAlign: "center", fontWeight: 500 }}>
+                            <Scissors size={12} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+                            Drag box on canvas to crop visitor face area
+                          </p>
+                          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 4 }}>
+                            <button className="vr-btn" onClick={applyCropSelection} style={{ ...btnPrimary, width: "auto", padding: "8px 18px", margin: 0 }}>
+                              <Scissors size={13} /> Apply Crop
+                            </button>
+                            <button className="vr-btn" onClick={useFullFrame} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                              <ImageIcon size={13} /> Use Full Frame
+                            </button>
+                            <button className="vr-btn" onClick={resetPhotoSelection} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                              <RotateCcw size={13} /> Retake
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* ── Camera Mode Selection & Live Stream View ── */
+                        <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          {/* Mode Switcher Tabs */}
+                          <div style={{ display: "flex", gap: 6, width: "100%", maxWidth: 440, background: T.bgField, padding: 4, borderRadius: 10, marginBottom: 12, border: `1px solid ${T.line}` }}>
+                            <button
+                              type="button"
+                              onClick={() => { setCameraMode("webcam"); setError(""); }}
+                              style={{
+                                flex: 1, padding: "7px 10px", borderRadius: 8, border: "none",
+                                background: cameraMode === "webcam" ? T.bgPanel : "transparent",
+                                color: cameraMode === "webcam" ? T.accent : T.textMuted,
+                                fontWeight: cameraMode === "webcam" ? 700 : 500, fontSize: 12, cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                                boxShadow: cameraMode === "webcam" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                                transition: "all 0.15s ease"
+                              }}
+                            >
+                              <Camera size={13} /> Web Camera
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setCameraMode("rtsp"); setError(""); }}
+                              style={{
+                                flex: 1, padding: "7px 10px", borderRadius: 8, border: "none",
+                                background: cameraMode === "rtsp" ? T.bgPanel : "transparent",
+                                color: cameraMode === "rtsp" ? T.accent : T.textMuted,
+                                fontWeight: cameraMode === "rtsp" ? 700 : 500, fontSize: 12, cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                                boxShadow: cameraMode === "rtsp" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                                transition: "all 0.15s ease"
+                              }}
+                            >
+                              <Video size={13} /> IP Camera
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setCameraMode("upload"); setError(""); fileRef.current?.click(); }}
+                              style={{
+                                flex: 1, padding: "7px 10px", borderRadius: 8, border: "none",
+                                background: cameraMode === "upload" ? T.bgPanel : "transparent",
+                                color: cameraMode === "upload" ? T.accent : T.textMuted,
+                                fontWeight: cameraMode === "upload" ? 700 : 500, fontSize: 12, cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                                boxShadow: cameraMode === "upload" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                                transition: "all 0.15s ease"
+                              }}
+                            >
+                              <Upload size={13} /> Upload File
+                            </button>
+                          </div>
 
-                            const startLiveFeed = async () => {
-                              if (!selectedRtspCam) return;
-                              setRtspError("");
-                              setIsRtspLoading(true);
-                              setIpCamOpen(true);
-                              // Fetch first frame immediately
-                              try {
-                                const res = await fetch(`/api/cameras/${selectedRtspCam.id}/snapshot_direct`);
-                                const data = await res.json();
-                                if (!res.ok || data.error) throw new Error(data.error || "Failed");
-                                setIpCamPreview(data.image);
-                                setIsRtspLoading(false);
-                                setIsLiveStreaming(true);
-                                // Start polling loop ~300 ms
-                                livePollingRef.current = setInterval(async () => {
-                                  try {
-                                    const r = await fetch(`/api/cameras/${selectedRtspCam.id}/snapshot_direct`);
-                                    const d = await r.json();
-                                    if (r.ok && !d.error) setIpCamPreview(d.image);
-                                  } catch { /* silently skip failed frames */ }
-                                }, 300);
-                              } catch (err: any) {
-                                setRtspError(err.message || "Could not open IP camera.");
-                                setIpCamOpen(false);
-                                setIsRtspLoading(false);
-                              }
-                            };
-
-                            const captureCurrentFrame = () => {
-                              if (!ipCamPreview) return;
-                              // Freeze the live feed
-                              stopLiveFeed();
-                              const frameToUse = ipCamPreview;
-                              setIpCamPreview(null);
-                              setCapturedRawFrame(frameToUse);
-                              setIsCropMode(true);
-                              setError("");
-                              const img = new Image();
-                              img.onload = () => {
-                                frameImgRef.current = img;
-                                const side = Math.min(img.naturalWidth, img.naturalHeight) * 0.6;
-                                const cx = (img.naturalWidth - side) / 2;
-                                const cy = (img.naturalHeight - side) / 2;
-                                cropRectRef.current = { x: cx, y: cy, w: side, h: side };
-                                renderCropCanvas(img, { x: cx, y: cy, w: side, h: side });
-                              };
-                              img.src = frameToUse;
-                            };
-
-                            return (
-                              <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-
-                                {/* ── Live Feed Viewer: 40vw × 30vh ── */}
-                                <div style={{
-                                  width: "40vw", height: "30vh", borderRadius: 10, overflow: "hidden",
-                                  background: "#0a0a0a", border: `2px solid ${isLiveStreaming ? T.accent : T.lineStrong}`,
-                                  display: "flex", alignItems: "center", justifyContent: "center",
-                                  position: "relative",
-                                  boxShadow: isLiveStreaming ? `0 0 0 3px ${T.accent}33` : "none",
-                                  transition: "border-color 0.2s, box-shadow 0.2s",
-                                }}>
-                                  {ipCamPreview ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={ipCamPreview}
-                                      alt="Live IP Camera"
-                                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                                    />
-                                  ) : (
-                                    <div style={{ textAlign: "center", padding: 16 }}>
-                                      <Camera size={40} color="#555" style={{ marginBottom: 10 }} />
-                                      <p style={{ fontSize: 13, color: "#888", margin: 0 }}>
-                                        {isRtspLoading
-                                          ? "Connecting to camera…"
-                                          : rtspError
-                                            ? rtspError
-                                            : !selectedRtspCam
-                                              ? "No camera selected"
-                                              : 'Click "Open Live Feed" to start'}
-                                      </p>
-                                      {isRtspLoading && (
-                                        <Loader2 size={22} color={T.accent} style={{ marginTop: 10, animation: "spin 1s linear infinite" }} />
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* LIVE badge */}
-                                  {isLiveStreaming && (
-                                    <div style={{
-                                      position: "absolute", top: 10, left: 10,
-                                      background: "#EF4444", color: "#fff",
-                                      fontSize: 10, fontWeight: 800, letterSpacing: "0.1em",
-                                      padding: "3px 8px", borderRadius: 4,
-                                      display: "flex", alignItems: "center", gap: 5,
-                                    }}>
-                                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff", display: "inline-block", animation: "pulse 1s ease-in-out infinite" }} />
-                                      LIVE
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* ── Controls ── */}
-                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                                  {!isLiveStreaming ? (
-                                    <button
-                                      className="vr-btn"
-                                      disabled={isRtspLoading || !selectedRtspCam}
-                                      onClick={startLiveFeed}
-                                      style={{ ...btnPrimary, width: "auto", padding: "9px 20px", margin: 0 }}
-                                    >
-                                      <Video size={14} /> {isRtspLoading ? "Connecting…" : "Open Live Feed"}
-                                    </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        className="vr-btn"
-                                        onClick={captureCurrentFrame}
-                                        style={{ ...btnPrimary, width: "auto", padding: "9px 20px", margin: 0, background: T.ok, borderColor: T.ok }}
-                                      >
-                                        <Camera size={14} /> Capture
-                                      </button>
-                                      <button
-                                        className="vr-btn"
-                                        onClick={stopLiveFeed}
-                                        style={{ ...btnSecondary, width: "auto", padding: "9px 18px", margin: 0 }}
-                                      >
-                                        <X size={14} /> Stop
-                                      </button>
-                                    </>
-                                  )}
-                                  <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
-                                    <Upload size={13} /> Upload Photo
-                                  </button>
-                                </div>
-
-                                {rtspError && <p style={{ fontSize: 12, color: T.stamp, margin: 0, textAlign: "center" }}>{rtspError}</p>}
-                              </div>
-                            );
-                          })()
-                          ) : (
-                            /* ── Webcam Mode ── */
+                          {/* ── Web Camera View ── */}
+                          {cameraMode === "webcam" && (
                             <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                               <div style={{
-                                width: 180, height: 180, borderRadius: "50%", overflow: "hidden",
-                                background: T.bgField, border: `2px dashed ${T.lineStrong}`,
+                                width: "100%", maxWidth: 440, height: 250, borderRadius: 12, overflow: "hidden",
+                                background: "var(--bg-deep)", border: `1.5px solid ${cameraActive ? T.accent : T.lineStrong}`,
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                position: "relative",
+                                position: "relative", boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
                               }}>
                                 <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: cameraActive ? "block" : "none" }} />
                                 {!cameraActive && (
-                                  <p style={{ fontSize: 12, color: T.textMuted, margin: 0, padding: 12, textAlign: "center" }}>
-                                    {cameraError ? "Camera unavailable — upload a photo instead." : "Opening camera…"}
-                                  </p>
+                                  <div style={{ textAlign: "center", padding: 16 }}>
+                                    <Camera size={32} color={T.textFaint} style={{ marginBottom: 8, margin: "0 auto", opacity: 0.5 }} />
+                                    <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>
+                                      {cameraError ? "Webcam permission denied or unavailable." : "Opening web camera…"}
+                                    </p>
+                                  </div>
                                 )}
                                 {cameraActive && (
                                   <span style={{
-                                    position: "absolute", bottom: 14, fontSize: 10, fontWeight: 700, color: T.accent,
-                                    background: "rgba(255,255,255,0.88)", padding: "3px 10px", borderRadius: 99,
-                                    border: `1px solid ${T.line}`, letterSpacing: "0.06em", textTransform: "uppercase",
+                                    position: "absolute", top: 10, left: 10, fontSize: 10, fontWeight: 700, color: "#10B981",
+                                    background: "rgba(0,0,0,0.65)", padding: "3px 8px", borderRadius: 6,
+                                    letterSpacing: "0.06em", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4
                                   }}>
-                                    Capturing…
+                                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981", display: "inline-block" }} />
+                                    WEBCAM LIVE
                                   </span>
                                 )}
                               </div>
                               <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                                 {cameraActive && (
-                                  <button className="vr-btn" onClick={captureVideoSnapshot} style={{ ...btnPrimary, width: "auto", padding: "8px 16px", margin: 0 }}>
-                                    <Camera size={13} /> Capture Live Feed
+                                  <button className="vr-btn" onClick={captureVideoSnapshot} style={{ ...btnPrimary, width: "auto", padding: "8px 18px", margin: 0 }}>
+                                    <Camera size={14} /> Capture Snapshot
                                   </button>
                                 )}
                                 <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
@@ -1657,13 +1574,104 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
                                 </button>
                                 {cameraError && (
                                   <button className="vr-btn" onClick={startWebcam} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
-                                    <Camera size={13} /> Retry Camera
+                                    <RefreshCw size={13} /> Retry Webcam
                                   </button>
                                 )}
                               </div>
                             </div>
                           )}
-                        </>
+
+                          {/* ── Streaming IP Camera View ── */}
+                          {cameraMode === "rtsp" && (
+                            <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                              <div style={{ width: "100%", maxWidth: 440, display: "flex", alignItems: "center", gap: 8 }}>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: T.textMuted, whiteSpace: "nowrap" }}>Camera:</label>
+                                <select
+                                  value={selectedRtspCam?.id || ""}
+                                  onChange={(e) => {
+                                    const cam = rtspCameras.find(c => c.id === e.target.value);
+                                    if (cam) {
+                                      setSelectedRtspCam(cam);
+                                      startRtspHlsStream(cam.id);
+                                    }
+                                  }}
+                                  style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.lineStrong}`, background: T.bgField, color: T.text, fontSize: 12.5, outline: "none" }}
+                                >
+                                  {rtspCameras.map(cam => (
+                                    <option key={cam.id} value={cam.id}>
+                                      {cam.name}{cam.place ? ` (${cam.place})` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div style={{
+                                width: "100%", maxWidth: 440, height: 250, borderRadius: 12, overflow: "hidden",
+                                background: "var(--bg-deep)", border: `1.5px solid ${T.accent}`, display: "flex", alignItems: "center", justifyContent: "center",
+                                position: "relative", boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
+                              }}>
+                                <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                {isRtspLoading && (
+                                  <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.85)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "#fff" }}>
+                                    <Loader2 size={24} color={T.accent} style={{ animation: "spin 1s linear infinite" }} />
+                                    <span style={{ fontSize: 12, opacity: 0.7 }}>Connecting to RTSP Stream…</span>
+                                  </div>
+                                )}
+                                {rtspError && !isRtspLoading && (
+                                  <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.9)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "#EF4444", padding: 16, textAlign: "center" }}>
+                                    <AlertCircle size={24} />
+                                    <span style={{ fontSize: 12 }}>{rtspError}</span>
+                                  </div>
+                                )}
+                                {!isRtspLoading && !rtspError && (
+                                  <span style={{
+                                    position: "absolute", top: 10, left: 10, fontSize: 10, fontWeight: 700, color: "#EF4444",
+                                    background: "rgba(0,0,0,0.65)", padding: "3px 8px", borderRadius: 6,
+                                    letterSpacing: "0.06em", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4
+                                  }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#EF4444", display: "inline-block" }} />
+                                    RTSP LIVE
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                                <button className="vr-btn" onClick={captureVideoSnapshot} style={{ ...btnPrimary, width: "auto", padding: "8px 18px", margin: 0 }}>
+                                  <Camera size={14} /> Capture Snapshot
+                                </button>
+                                <button className="vr-btn" onClick={() => fileRef.current?.click()} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                                  <Upload size={13} /> Upload Photo
+                                </button>
+                                {selectedRtspCam && (
+                                  <button className="vr-btn" onClick={() => startRtspHlsStream(selectedRtspCam.id)} style={{ ...btnSecondary, width: "auto", padding: "8px 16px", margin: 0 }}>
+                                    <RefreshCw size={13} /> Refresh Stream
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* ── Manual File Upload View ── */}
+                          {cameraMode === "upload" && (
+                            <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                              <div
+                                onClick={() => fileRef.current?.click()}
+                                style={{
+                                  width: "100%", maxWidth: 440, height: 180, borderRadius: 12,
+                                  border: `2px dashed ${T.lineStrong}`, background: T.bgField,
+                                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                                  cursor: "pointer", gap: 10, transition: "all 0.2s ease"
+                                }}
+                              >
+                                <Upload size={32} color={T.accent} style={{ opacity: 0.8 }} />
+                                <div style={{ textAlign: "center" }}>
+                                  <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: "0 0 2px" }}>Click or drag a photo file here</p>
+                                  <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>Supports JPG, PNG, WEBP</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                     <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
@@ -1845,7 +1853,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
             <div style={{ padding: 20 }}>
               <div style={{
                 position: "relative", borderRadius: 12, overflow: "hidden",
-                background: "#05070d", touchAction: "none", userSelect: "none",
+                background: "var(--bg-deep)", touchAction: "none", userSelect: "none",
                 cursor: "crosshair", maxHeight: 420,
               }}>
                 <canvas

@@ -91,7 +91,7 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, color: "#0f172a", width: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, color: "var(--text-primary)", width: "100%" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -103,7 +103,7 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
             <UserPlus size={16} color="#6366f1" />
           </div>
           <div>
-            <span style={{ fontWeight: 800, fontSize: 14, color: "#0f172a", display: "block" }}>Register New Face</span>
+            <span style={{ fontWeight: 800, fontSize: 14, color: "var(--text-primary)", display: "block" }}>Register New Face</span>
             <span style={{ fontSize: 10, color: "#64748b" }}>Extracts 512D InsightFace AI embedding</span>
           </div>
         </div>
@@ -144,7 +144,7 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
           </div>
 
           <div style={{
-            aspectRatio: "16/9", borderRadius: 14, overflow: "hidden", background: "#f8fafc",
+            aspectRatio: "16/9", borderRadius: 14, overflow: "hidden", background: "var(--bg-input)",
             border: `2px dashed ${image ? "#10b981" : "#cbd5e1"}`, position: "relative",
             display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
             minHeight: 180
@@ -179,7 +179,7 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
             ) : (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 16, textAlign: "center" }}>
                 <div style={{
-                  width: 44, height: 44, borderRadius: "50%", background: "#ffffff",
+                  width: 44, height: 44, borderRadius: "50%", background: "var(--bg-card)",
                   border: "1.5px dashed #94a3b8", display: "flex", alignItems: "center", justifyContent: "center",
                   boxShadow: "0 2px 4px rgba(0,0,0,0.04)"
                 }}>
@@ -208,8 +208,8 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
                     type="button"
                     onClick={() => fileRef.current?.click()}
                     style={{
-                      padding: "6px 12px", borderRadius: 8, border: "1px solid #cbd5e1",
-                      background: "#ffffff", color: "#334155", fontSize: 11, fontWeight: 700,
+                      padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border-strong)",
+                      background: "var(--bg-card)", color: "#334155", fontSize: 11, fontWeight: 700,
                       cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5,
                       boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
                     }}
@@ -244,8 +244,8 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
                 value={name}
                 onChange={e => setName(e.target.value)}
                 style={{
-                  width: "100%", background: "#ffffff", border: "1.5px solid #cbd5e1",
-                  borderRadius: 8, padding: "8px 12px", color: "#0f172a", fontSize: 12, outline: "none",
+                  width: "100%", background: "var(--bg-card)", border: "1.5px solid #cbd5e1",
+                  borderRadius: 8, padding: "8px 12px", color: "var(--text-primary)", fontSize: 12, outline: "none",
                   boxShadow: "0 1px 2px rgba(0,0,0,0.02)", transition: "all 0.2s"
                 }}
               />
@@ -264,8 +264,8 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
                   value={employeeCode}
                   onChange={e => setEmployeeCode(e.target.value)}
                   style={{
-                    width: "100%", background: "#ffffff", border: "1px solid #cbd5e1",
-                    borderRadius: 8, padding: "7px 10px", color: "#0f172a", fontSize: 11.5, outline: "none"
+                    width: "100%", background: "var(--bg-card)", border: "1px solid var(--border-strong)",
+                    borderRadius: 8, padding: "7px 10px", color: "var(--text-primary)", fontSize: 11.5, outline: "none"
                   }}
                 />
               </div>
@@ -281,8 +281,8 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
                   value={department}
                   onChange={e => setDepartment(e.target.value)}
                   style={{
-                    width: "100%", background: "#ffffff", border: "1px solid #cbd5e1",
-                    borderRadius: 8, padding: "7px 10px", color: "#0f172a", fontSize: 11.5, outline: "none"
+                    width: "100%", background: "var(--bg-card)", border: "1px solid var(--border-strong)",
+                    borderRadius: 8, padding: "7px 10px", color: "var(--text-primary)", fontSize: 11.5, outline: "none"
                   }}
                 />
               </div>
@@ -301,8 +301,8 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
                   value={designation}
                   onChange={e => setDesignation(e.target.value)}
                   style={{
-                    width: "100%", background: "#ffffff", border: "1px solid #cbd5e1",
-                    borderRadius: 8, padding: "7px 10px", color: "#0f172a", fontSize: 11.5, outline: "none"
+                    width: "100%", background: "var(--bg-card)", border: "1px solid var(--border-strong)",
+                    borderRadius: 8, padding: "7px 10px", color: "var(--text-primary)", fontSize: 11.5, outline: "none"
                   }}
                 />
               </div>
@@ -318,8 +318,8 @@ export default function RegisterPanel({ onSuccess, canCapture, captureFrame }: P
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   style={{
-                    width: "100%", background: "#ffffff", border: "1px solid #cbd5e1",
-                    borderRadius: 8, padding: "7px 10px", color: "#0f172a", fontSize: 11.5, outline: "none"
+                    width: "100%", background: "var(--bg-card)", border: "1px solid var(--border-strong)",
+                    borderRadius: 8, padding: "7px 10px", color: "var(--text-primary)", fontSize: 11.5, outline: "none"
                   }}
                 />
               </div>
