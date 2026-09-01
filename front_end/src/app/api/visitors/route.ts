@@ -7,30 +7,11 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function uploadBase64ToStorage(base64Str: string, path: string): Promise<string> {
-  const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-  if (!matches || matches.length !== 3) {
-    throw new Error("Invalid base64 string format");
-  }
-  const contentType = matches[1];
-  const buffer = Buffer.from(matches[2], "base64");
-
-  const { error } = await supabase.storage
-    .from("face")
-    .upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
-
-  if (error) {
-    throw new Error(`Failed to upload to storage: ${error.message}`);
-  }
-
-  const { data: urlData } = supabase.storage
-    .from("face")
-    .getPublicUrl(path);
-
-  return urlData.publicUrl;
+import { uploadOrDataUrl } from "../../../lib/storage-upload";
+async function uploadBase64ToStorage(base64Str: string, path: string): Promise<{
+  url: string; usedStorage: boolean;
+}> {
+  return uploadOrDataUrl(supabase, base64Str, path);
 }
 
 export async function POST(request: Request) {
@@ -90,12 +71,14 @@ export async function POST(request: Request) {
     const originalPath = `visitors/${visitorId}_original.jpg`;
     const photoPath = `visitors/${visitorId}_photo.jpg`;
     
-    await uploadBase64ToStorage(photo_image, originalPath);
-    const photoPublicUrl = await uploadBase64ToStorage(finalPhotoB64, photoPath);
+    const origUp = await uploadBase64ToStorage(photo_image, originalPath);
+    const photoUp = await uploadBase64ToStorage(finalPhotoB64, photoPath);
+    const photoPublicUrl = photoUp.url;
 
     // 3. Upload signature to Supabase Storage
     const signaturePath = `visitors/${visitorId}_sig.png`;
-    const signaturePublicUrl = await uploadBase64ToStorage(signature_image, signaturePath);
+    const sigUp = await uploadBase64ToStorage(signature_image, signaturePath);
+    const signaturePublicUrl = sigUp.url;
 
     // 4. Insert record into visitors table
     const { data, error } = await supabase
@@ -168,8 +151,8 @@ export async function POST(request: Request) {
                              contenttype: "image/jpeg",
                              templateid: "1727467",
                              templateinfo: `1727467~${empData.name}~${full_name}~${purpose_of_visit}~${visitorCompany}~${visitorDate}`,
-                             mediadata: {
-                                 link: photoPublicUrl || logoUrl
+                              mediadata: {
+                                  link: photoUp.usedStorage ? photoPublicUrl : logoUrl
                              },
                              property: {
                                  media: {

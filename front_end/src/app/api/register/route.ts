@@ -7,30 +7,11 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function uploadBase64ToStorage(base64Str: string, path: string): Promise<string> {
-  const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-  if (!matches || matches.length !== 3) {
-    throw new Error("Invalid base64 string format");
-  }
-  const contentType = matches[1];
-  const buffer = Buffer.from(matches[2], "base64");
-
-  const { error } = await supabase.storage
-    .from("face")
-    .upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
-
-  if (error) {
-    throw new Error(`Failed to upload to storage: ${error.message}`);
-  }
-
-  const { data: urlData } = supabase.storage
-    .from("face")
-    .getPublicUrl(path);
-
-  return urlData.publicUrl;
+import { uploadOrDataUrl } from "../../../lib/storage-upload";
+async function uploadBase64ToStorage(base64Str: string, path: string): Promise<{
+  url: string; usedStorage: boolean;
+}> {
+  return uploadOrDataUrl(supabase, base64Str, path);
 }
 
 export async function POST(request: Request) {
@@ -71,7 +52,8 @@ export async function POST(request: Request) {
     const cropPath = `enrolled/${profileId}_crop.jpg`;
 
     await uploadBase64ToStorage(image, originalPath);
-    const cropPublicUrl = await uploadBase64ToStorage(cropB64, cropPath);
+    const cropUp = await uploadBase64ToStorage(cropB64, cropPath);
+    const cropPublicUrl = cropUp.url;
 
     // 3. Insert the face data into Supabase table
     const { data, error } = await supabase
