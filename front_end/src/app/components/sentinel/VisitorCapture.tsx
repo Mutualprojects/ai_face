@@ -64,9 +64,7 @@ const btnSecondary: React.CSSProperties = {
 };
 
 function getBackendUrl() {
-  if (typeof window === "undefined") return "http://127.0.0.1:5000";
-  const host = window.location.hostname;
-  return `http://${host === "localhost" ? "127.0.0.1" : host}:5000`;
+  return "/flask";
 }
 
 function hostname() {
@@ -128,7 +126,7 @@ export default function VisitorCapture({ onPhoto, canCapture = false, captureFra
     load();
     const iv = setInterval(async () => {
       try {
-        const r = await fetch(`http://${hostname()}:9997/v3/paths/list`);
+        const r = await fetch("/mtx/v3/paths/list");
         if (r.ok) {
           const d = await r.json();
           const ready = new Set<string>(

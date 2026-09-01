@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 
-const API = "http://localhost:5000";
+const API = "/flask";
 const KEY = "ph0-secr3t-k3y-v1-992";
 const H = { Authorization: `Bearer ${KEY}` };
 

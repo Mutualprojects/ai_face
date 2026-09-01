@@ -1,0 +1,24 @@
+[Unit]
+Description=go2rtc RTSP/WebRTC relay for Sentinel VMS
+Documentation=https://github.com/AlexxIT/go2rtc
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rtsp-relay
+ExecStart=/opt/rtsp-relay/go2rtc -config /opt/rtsp-relay/go2rtc.yaml
+Restart=always
+RestartSec=3
+# Do not let a stale crash-loop hold the port; give it time to recover.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+# Sane resource limits so a bad camera stream can't take the box down.
+LimitNOFILE=1048576
+# Run as a dedicated low-privilege user if present, else root fallback.
+# (Create the dir owned by `rtsprelay` for best practice.)
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

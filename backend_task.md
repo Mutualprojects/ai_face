@@ -5,3 +5,4 @@
 - [ ] Frontend WebRTCStream.tsx: captureFrameBlob + FormData match loop
 - [ ] Frontend RegisterPanel.tsx: FormData binary upload for registration
 - [x] Verify startup logs & test end-to-end
+

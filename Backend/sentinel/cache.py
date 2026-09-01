@@ -1,16 +1,18 @@
-"""Atomic in-RAM embedding cache with vectorized cosine matching.
+"""In-RAM face embedding cache with vectorized cosine matching.
 
-The cache holds an immutable (faces, normalized-matrix) snapshot so a
-best-match index computed from one array can never alias into a newer one.
+Holds an atomic immutable (faces, normalized-matrix) snapshot so a best_idx
+computed from one array can never alias into a newer one. The refresh swap
+is the only mutation, guarded by a lock.
 """
 
+import json
 import threading
 
 import numpy as np
 
-from . import database
+from . import repositories
 from .config import Config
-from .logger import get_logger
+from .logging_setup import get_logger
 
 log = get_logger("sentinel.cache")
 
@@ -23,77 +25,68 @@ class CacheSnapshot:
         self.matrix = matrix
 
 
-EMPTY = CacheSnapshot([], None)
-_snapshot = EMPTY
-_lock = threading.Lock()
+EMPTY_SNAPSHOT = CacheSnapshot([], None)
+_snapshot = EMPTY_SNAPSHOT
+_snapshot_lock = threading.Lock()
 
 
-def get_snapshot():
-    with _lock:
+def get_cache_snapshot() -> CacheSnapshot:
+    with _snapshot_lock:
         return _snapshot
 
 
-def refresh():
-    global _snapshot
-    try:
-        all_faces = database.fetch_known_faces() + database.fetch_visitors()
-        rows = []
-        valid = []
-        for item in all_faces:
-            emb = database.parse_embedding(item.get("embedding"))
-            if emb is None:
-                continue
-            norm = float(np.linalg.norm(emb))
-            if norm == 0:
-                continue
-            rows.append(emb / norm)
-            valid.append(item)
+def match_embedding(input_emb, snapshot: CacheSnapshot = None, threshold=None, margin=None, top_n: int = 3):
+    """Vectorized cosine similarity match against the atomic cache snapshot,
+    with margin-based rejection.
 
-        matrix = np.vstack(rows) if rows else None
-        with _lock:
-            _snapshot = CacheSnapshot(valid, matrix)
-        from .models import active_model
-        log.info("Cache refreshed: %d face(s) in RAM matrix (model=%s).", len(valid), active_model)
-    except Exception as e:
-        log.error("Cache refresh error: %s", e)
+    Rather than accepting the single best match the moment it clears the
+    threshold, we also require it to beat the *second-best* candidate by
+    `margin`. A close runner-up means the embedding sits ambiguously
+    between two identities (siblings/look-alikes or noisy crops) and should
+    be reported as a non-match. Set margin=0 to fall back to pure
+    threshold-only behaviour.
 
-
-def match(input_embedding, threshold=None, margin=None, top_n: int = 3):
-    """Vectorized cosine match with margin-based rejection.
-
-    Returns (best_face_or_None, best_score, runner_up_score, top_candidates)
-    where top_candidates is a list of up to `top_n` {name, score, photo_url}
-    dicts ranked by similarity (the "closest identities" comparison data).
+    Returns (best_face_or_None, best_score, runner_up_score, top_candidates).
     """
-    threshold = Config.MATCH_THRESHOLD if threshold is None else threshold
-    margin = Config.MATCH_MARGIN if margin is None else margin
-    snapshot = get_snapshot()
+    if threshold is None:
+        threshold = Config.MATCH_THRESHOLD
+    if margin is None:
+        margin = Config.MATCH_MARGIN
+    if snapshot is None:
+        snapshot = get_cache_snapshot()
+
     if not snapshot.faces or snapshot.matrix is None or len(snapshot.matrix) == 0:
         return None, -1.0, -1.0, []
 
-    vec = np.asarray(input_embedding, dtype=np.float32)
-    if snapshot.matrix.shape[1] != vec.shape[0]:
+    input_vec = np.asarray(input_emb, dtype=np.float32)
+    if snapshot.matrix.shape[1] != input_vec.shape[0]:
         log.warning(
-            "Embedding dimension mismatch (cache=%d, input=%d).",
-            snapshot.matrix.shape[1], vec.shape[0],
+            "[match_embedding] Dimension mismatch: cache=%s-d, input=%s-d. "
+            "Likely a stale model/embedding mismatch — run /api/refresh_cache "
+            "after confirming embeddings are regenerated.",
+            snapshot.matrix.shape[1], input_vec.shape[0],
         )
         return None, -1.0, -1.0, []
 
-    norm = float(np.linalg.norm(vec))
-    if norm == 0:
+    norm_in = np.linalg.norm(input_vec)
+    if norm_in == 0:
         return None, -1.0, -1.0, []
-    vec = vec / norm
+    vec = input_vec / norm_in
 
     sims = np.dot(snapshot.matrix, vec)
     if len(sims) == 1:
-        best_idx, best_score, runner_up = 0, float(sims[0]), -1.0
+        best_idx = 0
+        best_score = float(sims[0])
+        runner_up = -1.0
     else:
-        top2 = np.argpartition(sims, -2)[-2:]
-        top2 = top2[np.argsort(-sims[top2])]
-        best_idx = int(top2[0])
+        top2_idx = np.argpartition(sims, -2)[-2:]
+        top2_idx = top2_idx[np.argsort(-sims[top2_idx])]
+        best_idx = int(top2_idx[0])
         best_score = float(sims[best_idx])
-        runner_up = float(sims[int(top2[1])])
+        runner_up = float(sims[int(top2_idx[1])])
 
+    # Top-N candidates for the comparison view (always computed so the UI
+    # can show exactly which enrolled identities a face is closest to).
     n = min(top_n, len(sims))
     top_idx = np.argpartition(sims, -n)[-n:] if n > 1 else np.array([best_idx])
     top_idx = top_idx[np.argsort(-sims[top_idx])]
@@ -109,3 +102,55 @@ def match(input_embedding, threshold=None, margin=None, top_n: int = 3):
     if best_score >= threshold and (best_score - runner_up) >= margin:
         return snapshot.faces[best_idx], best_score, runner_up, top_candidates
     return None, best_score, runner_up, top_candidates
+
+
+def refresh_cache():
+    """Reload all known face embeddings, build the normalized matrix, and
+    swap it in as ONE atomic snapshot."""
+    global _snapshot
+    try:
+        faces = repositories.faces.fetch_known_faces()
+        for f in faces:
+            f["is_visitor"] = False
+
+        visitors = repositories.faces.fetch_visitors()
+        all_faces = faces + visitors
+
+        matrix_rows = []
+        valid_faces = []
+        for item in all_faces:
+            emb_val = item.get("embedding")
+            if not emb_val:
+                continue
+            try:
+                if isinstance(emb_val, str):
+                    emb_arr = np.array(json.loads(emb_val), dtype=np.float32)
+                else:
+                    emb_arr = np.array(emb_val, dtype=np.float32)
+            except Exception as parse_err:
+                log.warning("[Cache] Skipping unparsable embedding for '%s': %s",
+                            item.get('name'), parse_err)
+                continue
+
+            norm = np.linalg.norm(emb_arr)
+            if norm == 0:
+                continue
+            matrix_rows.append(emb_arr / norm)
+            valid_faces.append(item)
+
+        matrix = np.vstack(matrix_rows) if matrix_rows else None
+        new_snapshot = CacheSnapshot(valid_faces, matrix)
+
+        with _snapshot_lock:
+            _snapshot = new_snapshot
+
+        log.info(
+            "[Cache] Loaded %d face(s) into RAM matrix (%d known faces, %d visitors fetched; "
+            "%d skipped — no/invalid embedding).",
+            len(valid_faces), len(faces), len(visitors),
+            len(faces) + len(visitors) - len(valid_faces),
+        )
+        return new_snapshot
+    except Exception as e:
+        log.error("Error refreshing cache: %s", e)
+        return None

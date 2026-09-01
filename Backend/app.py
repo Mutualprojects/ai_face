@@ -1332,6 +1332,50 @@ def effective_source_url(rtsp_url: str, via_relay: bool, camera_id: str = "") ->
         return f"{Config.RTSP_RELAY_RTSP_URL}/{camera_id}"
     return rtsp_url
 
+def relay_reachable() -> bool:
+    """Cheap upstream check: is the go2rtc relay API alive right now?"""
+    if not relay_configured():
+        return False
+    try:
+        r = requests.get(f"{Config.RTSP_RELAY_API_URL}/api/streams", timeout=3)
+        return r.ok
+    except Exception:
+        return False
+
+def relay_self_heal() -> bool:
+    """Best-effort relay recovery + stream re-registration.
+
+    Called on a timer so a via_relay camera whose relay went down (machine
+    reboot, service "changed") recovers automatically: as soon as go2rtc is
+    back we re-register every via_relay camera's upstream pull, which makes
+    MediaMTX's runOnDemand connect and the stream resume — no manual action.
+    Returns True when the relay is healthy.
+    """
+    if not relay_configured():
+        return False
+    if not relay_reachable():
+        log.warning("[Relay] go2rtc relay down (%s) — will keep retrying.",
+                    Config.RTSP_RELAY_API_URL)
+        return False
+    # Relay is up: make sure every via_relay camera is registered upstream.
+    try:
+        res = supabase.table("cameras").select(_cameras_select("id,rtsp_url")).execute()
+        healed = False
+        for cam in (res.data or []):
+            if not _cam_via_relay(cam):
+                continue
+            cid, url = cam["id"], (cam.get("rtsp_url") or "")
+            if not url or url.startswith("device:"):
+                continue
+            if register_relay_stream(cid, validate_rtsp_url(url)):
+                healed = True
+        if healed:
+            log.info("[Relay] re-registered via_relay cameras with healthy relay")
+        return True
+    except Exception as e:
+        log.error("[Relay] self-heal cycle failed: %s", e)
+        return False
+
 def ensure_via_relay_column():
     """Detect once whether migration_cameras_via_relay.sql was applied."""
     global VIA_RELAY_COLUMN_OK
@@ -1415,6 +1459,13 @@ def build_mediamtx_src(stream_url: str, camera_id: str = None, via_relay: bool =
         stream_url = f"{Config.RTSP_RELAY_RTSP_URL}/{camera_id}"
         log.info("[Camera Src] '%s' routed via relay %s", camera_id, Config.RTSP_RELAY_RTSP_URL)
 
+    return _finish_mediamtx_src(stream_url)
+
+def _finish_mediamtx_src(stream_url: str) -> dict:
+    """Build the concrete MediaMTX entry (source/runOnDemand) for a resolved
+    RTSP URL. Assumes via_relay routing has already been applied."""
+    from urllib.parse import unquote
+
     raw = validate_rtsp_url(stream_url)
     decoded_url = unquote(raw)
 
@@ -1448,6 +1499,52 @@ def build_mediamtx_src(stream_url: str, camera_id: str = None, via_relay: bool =
         "runOnDemandRestart": True,
         "runOnDemandCloseAfter": "10s"
     }
+
+def _relay_stub_entry(camera_id: str) -> dict:
+    """Resilient MediaMTX path entry for a via_relay camera when the relay
+    cannot be reached at write-time.
+
+    The relay is the ONLY host that can reach some cameras, so the path must
+    exist pointing at the relay source even if go2rtc is momentarily down.
+    We use a `runOnDemand` ffmpeg pull from the relay (any codec → H.264) with
+    restart+close-after so MediaMTX starts streaming the instant the relay
+    comes back — no backend restart required.
+
+    The intended relay RTSP URL is re-built lazily (Config read at call time)
+    so a later .env change takes effect without code edits.
+    """
+    relay_src = f"{Config.RTSP_RELAY_RTSP_URL}/{camera_id}"
+    return {
+        "source": "publisher",
+        "runOnDemand": (
+            "/usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero "
+            "-fflags nobuffer+discardcorrupt -flags low_delay "
+            "-analyzeduration 100000 -probesize 100000 -rtsp_transport tcp "
+            f"-i {_shell_single_quote(relay_src)} "
+            "-c:v libx264 -preset ultrafast -tune zerolatency -crf 20 "
+            "-pix_fmt yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an "
+            "-f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH"
+        ),
+        "runOnDemandRestart": True,
+        "runOnDemandCloseAfter": "10s",
+    }
+
+def build_relay_resilient_src(stream_url: str, camera_id: str) -> dict:
+    """Build a via_relay camera's MediaMTX entry without requiring the relay
+    to be reachable right now.
+
+    Tries the normal path first (probe → direct/runOnDemand). If the relay
+    rejects the registration call (unreachable/starting up), falls back to a
+    resilient runOnDemand entry pointed at the relay so the path is always
+    registered in MediaMTX and auto-reconnects once go2rtc is up.
+    """
+    try:
+        return build_mediamtx_src(stream_url, camera_id=camera_id, via_relay=True)
+    except ValueError as ve:
+        log.warning("[Camera Src] '%s' relay not reachable now (%s) — "
+                    "registering resilient relay path so it auto-recovers.",
+                    camera_id, ve)
+        return _relay_stub_entry(camera_id)
 
 # ── CAMERA CONNECTION STATES ────────────────────────────────
 # CONNECTING   → MediaMTX is pulling / path registered, no media yet
@@ -1546,6 +1643,9 @@ def camera_health_monitor():
     log.info("[Health] Camera connection-state monitor started (every %.0fs).", interval)
     while True:
         try:
+            # Keep via_relay cameras pointing at a working relay: if go2rtc is
+            # up (re)register upstreams, if it's down log + retry next cycle.
+            relay_self_heal()
             res = supabase.table("cameras").select(_cameras_select("id,rtsp_url")).execute()
             paths = _mediamtx_paths_snapshot()
             for cam in (res.data or []):
@@ -1584,11 +1684,18 @@ def regenerate_all_mediamtx_entries() -> bool:
             cid, url = cam["id"], (cam.get("rtsp_url") or "")
             if not url or url.startswith("device:"):
                 continue
-            try:
-                entry = build_mediamtx_src(url, camera_id=cid, via_relay=_cam_via_relay(cam))
-            except ValueError as ve:
-                log.warning("[Regen] skipping '%s': %s", cid, ve)
-                continue
+            if _cam_via_relay(cam) and relay_configured():
+                # via_relay camera: register a resilient entry pointing at the
+                # relay source even if the relay is temporarily unreachable, so
+                # the path ALWAYS exists in MediaMTX and auto-reconnects once
+                # go2rtc is back. Prevents persistent 404 WHEP/HLS failures.
+                entry = build_relay_resilient_src(url, cid)
+            else:
+                try:
+                    entry = build_mediamtx_src(url, camera_id=cid, via_relay=False)
+                except ValueError as ve:
+                    log.warning("[Regen] skipping '%s': %s", cid, ve)
+                    continue
             if paths.get(cid) != entry:
                 paths[cid] = entry
                 changed = True

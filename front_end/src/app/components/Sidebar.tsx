@@ -261,14 +261,14 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
     const fetchStats = async () => {
       try {
         const [fRes, lRes, cRes] = await Promise.allSettled([
-          fetch("http://localhost:5000/api/registered_faces", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
-          fetch("http://localhost:5000/api/face_logs?limit=1", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
-          fetch("http://localhost:5000/api/cameras", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
+          fetch("/flask/api/registered_faces", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
+          fetch("/flask/api/face_logs?limit=1", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
+          fetch("/flask/api/cameras", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } }),
         ]);
         const faces = fRes.status === "fulfilled" && fRes.value.ok ? (await fRes.value.json()).length || 0 : 0;
         const cams = cRes.status === "fulfilled" && cRes.value.ok ? (await cRes.value.json()).length || 0 : 0;
         // Get total log count from a separate query
-        const lCountRes = await fetch("http://localhost:5000/api/face_logs?limit=9999", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } });
+        const lCountRes = await fetch("/flask/api/face_logs?limit=9999", { headers: { Authorization: "Bearer ph0-secr3t-k3y-v1-992" } });
         const lData = lCountRes.ok ? await lCountRes.json() : [];
         const logs = Array.isArray(lData) ? lData.length : (lData.logs?.length || 0);
         const sizeMB = (faces * 2 + logs * 30) / 1024 + 0.5;

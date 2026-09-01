@@ -7,35 +7,31 @@ import { useAuth } from "../components/AuthProvider";
 import styles from "./login.module.css";
 import securityIll from "./cybersecurity-concept-illustration.png";
 
-/* ─── helpers ─────────────────────────────────────────────────────────────── */
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:8005";
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY4NDUyMjYzNSwiZXhwIjoxODE2MDU4NjM1fQ.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE";
+/* ─── STATIC LOGIN HELPERS ─────────────────────────────────────────────────── */
+// Static authentication — credentials are checked directly in the browser,
+// no Supabase Auth / database round-trip required. Update these to change the
+// default login. The form is pre-filled with these same values.
+const STATIC_USERS: Record<string, { password: string; role: string; full_name: string; department: string }> = {
+  "superadmin@sentinel.local": {
+    password: "Admin@1234",
+    role: "super_admin",
+    full_name: "Super Admin",
+    department: "IT",
+  },
+};
 
-async function signInWithPassword(email: string, password: string) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": SUPABASE_KEY,
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.message || "Invalid email or password");
-  return data;
-}
-
-async function getAdminRole(userId: string, accessToken: string) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_users?auth_id=eq.${userId}&select=role,full_name,email,department`, {
-    headers: {
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${accessToken}`,
-    },
-  });
-  const data = await res.json();
-  return data?.[0] ?? null;
+function verifyStaticLogin(email: string, password: string) {
+  const key = String(email || "").trim().toLowerCase();
+  const u = STATIC_USERS[key];
+  if (!u) throw new Error("Invalid email or password");
+  if (u.password !== password) throw new Error("Invalid email or password");
+  return {
+    id: `SUPERADMIN-${Date.now()}`,
+    email: String(email).trim(),
+    full_name: u.full_name,
+    department: u.department,
+    role: u.role,
+  };
 }
 
 export default function LoginPage() {
@@ -96,24 +92,17 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const session = await signInWithPassword(email.trim(), password);
-      const adminRecord = await getAdminRole(session.user.id, session.access_token);
-
-      if (!adminRecord) {
-        setError("Access denied — your account does not have admin privileges.");
-        setLoading(false);
-        return;
-      }
+      const account = verifyStaticLogin(email, password);
 
       setSuccess(true);
       setTimeout(() => {
         authLogin({
-          access_token: session.access_token,
-          user: session.user,
-          role: adminRecord.role,
-          full_name: adminRecord.full_name,
-          email: adminRecord.email,
-          department: adminRecord.department,
+          access_token: `sentinel-static-${Date.now()}`,
+          user: { id: account.id, email: account.email },
+          role: account.role as "super_admin" | "admin" | "viewer",
+          full_name: account.full_name,
+          email: account.email,
+          department: account.department,
           logged_in_at: Date.now(),
         });
       }, 300);

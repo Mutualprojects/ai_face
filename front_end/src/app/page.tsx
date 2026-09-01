@@ -28,8 +28,7 @@ function HomeContent() {
   // Fetch which paths are READY from MediaMTX API
   const fetchReadyCameras = useCallback(async (): Promise<Set<string>> => {
     try {
-      const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-      const res = await fetch(`http://${host}:9997/v3/paths/list`);
+      const res = await fetch("/mtx/v3/paths/list");
       if (res.ok) {
         const data = await res.json();
         const ready = new Set<string>(
@@ -46,11 +45,9 @@ function HomeContent() {
 
   const fetchCameras = useCallback(async () => {
     try {
-      const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-      
       const fetchList = async () => {
         try {
-          const res = await fetch(`http://${host}:5000/api/cameras`, {
+          const res = await fetch("/flask/api/cameras", {
             headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
           });
           if (res.ok) return await res.json();

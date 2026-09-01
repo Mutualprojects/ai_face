@@ -198,7 +198,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
   useEffect(() => {
     const fetchCameras = async () => {
       try {
-        const res = await fetch(`http://${host}:5000/api/cameras`, {
+        const res = await fetch("/flask/api/cameras", {
           headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
         });
         if (res.ok) {
@@ -262,7 +262,7 @@ export default function LogPanel({ logs, faces, onRefresh, autoRefresh = false }
       }
       if (!res.ok) {
         // 3. Fall back to Python backend
-        res = await fetch(`http://${host}:5000/api/face_logs/unknown`, {
+        res = await fetch("/flask/api/face_logs/unknown", {
           method: "DELETE",
           headers: { "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" }
         });

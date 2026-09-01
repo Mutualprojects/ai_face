@@ -379,7 +379,7 @@ export default function VisitorsPanel({ onSuccess, canCapture = false, captureFr
     let mounted = true;
     const checkReady = async () => {
       try {
-        const r = await fetch(`http://${window.location.hostname}:9997/v3/paths/list`);
+        const r = await fetch("/mtx/v3/paths/list");
         if (r.ok) {
           const d = await r.json();
           const ready = new Set<string>(

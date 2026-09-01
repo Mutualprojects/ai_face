@@ -28,8 +28,7 @@ export default function CameraModal({ onClose, onSuccess }: { onClose: () => voi
   const fetchLocalDevices = async () => {
     setFetchingDevices(true);
     try {
-      const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
-      const res = await fetch(`http://${host}:5000/api/cameras/local_devices`);
+      const res = await fetch("/flask/api/cameras/local_devices");
       if (res.ok) {
         const data = await res.json();
         const devs = data.devices || [];
@@ -49,12 +48,11 @@ export default function CameraModal({ onClose, onSuccess }: { onClose: () => voi
     setError("");
     setLoading(true);
     try {
-      const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
       const payload = sourceType === "device"
         ? { name, place, source_type: "device", device_index: Number(deviceIndex) }
         : { name, place, source_type: "rtsp", rtsp_url: rtsp };
 
-      const res = await fetch(`http://${host}:5000/api/cameras`, {
+      const res = await fetch("/flask/api/cameras", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": process.env.NEXT_PUBLIC_API_KEY || "" },
         body: JSON.stringify(payload)

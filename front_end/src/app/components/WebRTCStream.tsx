@@ -28,11 +28,9 @@ import ComparisonPanel from "./sentinel/ComparisonPanel";
 
 const WEBRTC_TIMEOUT = 20000;
 
-// Safely compute backend URL (only runs on client, avoids SSR hydration mismatch)
+// Backend proxied through Next.js rewrite — works from any browser/IP
 function getBackendUrl() {
-  if (typeof window === "undefined") return "http://127.0.0.1:5000";
-  const host = window.location.hostname;
-  return `http://${host === "localhost" ? "127.0.0.1" : host}:5000`;
+  return "/flask";
 }
 
 interface Props {
@@ -64,7 +62,7 @@ function Chip({ dot, label, tint }: { dot: string; label: string; tint?: string 
 
 export default function WebRTCStream({ streamName = "camera1", serverPort = "8891", initialTab = "register", detectionOnly = false }: Props) {
   // Computed on client only to avoid SSR/client hydration mismatch
-  const [backendUrl, setBackendUrl] = useState("http://127.0.0.1:5000");
+  const [backendUrl, setBackendUrl] = useState("/flask");
   const [cleanView, setCleanView] = useState(detectionOnly);
   useEffect(() => { setCleanView(detectionOnly); }, [detectionOnly]);
   useEffect(() => { setBackendUrl(getBackendUrl()); }, []);

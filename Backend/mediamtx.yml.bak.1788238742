@@ -138,15 +138,6 @@ pathDefaults:
   srtPublishPassphrase: null
   srtReadPassphrase: null
 paths:
-  '11':
-    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
-      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
-      100000 -rtsp_transport tcp -i 'rtsp://100.64.192.94:8554/11' -c:v libx264 -preset
-      ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g 15 -keyint_min 15 -sc_threshold
-      0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
-    runOnDemandCloseAfter: 10s
-    runOnDemandRestart: true
-    source: publisher
   all_others: null
 playback: false
 playbackAddress: :9996
