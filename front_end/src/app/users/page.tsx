@@ -33,6 +33,7 @@ import {
   FileText,
   BarChart3,
   Globe,
+  ScanFace,
 } from "lucide-react";
 
 /* ─── Types ─── */
@@ -125,6 +126,55 @@ const ROLE_PERMISSIONS: Record<User["role"], Permission[]> = {
   ],
 };
 
+/* ─── Module-level Role Access Matrix (best-of-best) ───
+   Each module shows the effective access each role gets:
+   - "view"  → can read
+   - "edit"  → can view + edit (mutate non-destructive)
+   - "full"  → can view + edit + delete
+   "—"       → no access
+*/
+type AccessLevel = "full" | "edit" | "view" | "none";
+
+type ModuleAccess = {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  desc: string;
+  byRole: Record<User["role"], AccessLevel>;
+};
+
+const MODULE_ACCESS: ModuleAccess[] = [
+  { id: "dashboard", label: "Dashboard", desc: "Live face recognition overview & presence", icon: <BarChart3 size={14} />,
+    byRole: { admin: "full", manager: "view", operator: "view", viewer: "view" } },
+  { id: "employees", label: "Employees", desc: "Employee directory & records", icon: <Users size={14} />,
+    byRole: { admin: "full", manager: "edit", operator: "view", viewer: "view" } },
+  { id: "departments", label: "Departments", desc: "Department structure & org mapping", icon: <Briefcase size={14} />,
+    byRole: { admin: "full", manager: "edit", operator: "view", viewer: "view" } },
+  { id: "cameras", label: "Cameras", desc: "Surveillance feeds, RTSP & stream status", icon: <Camera size={14} />,
+    byRole: { admin: "full", manager: "edit", operator: "view", viewer: "view" } },
+  { id: "faces", label: "Face Recognition", desc: "Identify, register & match individuals", icon: <ScanFace size={14} />,
+    byRole: { admin: "full", manager: "edit", operator: "edit", viewer: "view" } },
+  { id: "visitors", label: "Visitors", desc: "Visitor registration & tracking", icon: <Globe size={14} />,
+    byRole: { admin: "full", manager: "full", operator: "edit", viewer: "view" } },
+  { id: "logs", label: "Detection Log", desc: "Person / unknown encounter history", icon: <FileText size={14} />,
+    byRole: { admin: "full", manager: "view", operator: "view", viewer: "view" } },
+  { id: "analytics", label: "Analytics", desc: "Trends, charts & insights", icon: <BarChart3 size={14} />,
+    byRole: { admin: "view", manager: "view", operator: "view", viewer: "view" } },
+  { id: "sdk", label: "Manage SDK", desc: "API keys & integration config", icon: <Database size={14} />,
+    byRole: { admin: "full", manager: "edit", operator: "none", viewer: "none" } },
+  { id: "users", label: "User Management", desc: "Users, roles & access permissions", icon: <Shield size={14} />,
+    byRole: { admin: "full", manager: "view", operator: "none", viewer: "none" } },
+  { id: "settings", label: "Settings", desc: "System-wide configuration", icon: <Settings size={14} />,
+    byRole: { admin: "full", manager: "view", operator: "none", viewer: "none" } },
+];
+
+const ACCESS_LEVEL_META: Record<AccessLevel, { label: string; color: string; bg: string }> = {
+  full: { label: "Full", color: "#059669", bg: "rgba(5,150,105,0.12)" },
+  edit: { label: "Edit", color: "#6366f1", bg: "rgba(99,102,241,0.12)" },
+  view: { label: "View", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
+  none: { label: "—", color: "#94a3b8", bg: "rgba(148,163,184,0.08)" },
+};
+
 const ROLE_CONFIG: Record<User["role"], { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
   admin: { label: "Admin", color: "#dc2626", bg: "rgba(220,38,38,0.08)", border: "rgba(220,38,38,0.2)", icon: <ShieldAlert size={13} /> },
   manager: { label: "Manager", color: "#6366f1", bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.2)", icon: <ShieldCheck size={13} /> },
@@ -179,8 +229,11 @@ export default function UsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [showPerms, setShowPerms] = useState<string | null>(null);
+  const [editPermsUser, setEditPermsUser] = useState<string | null>(null);
+  const [draftPerms, setDraftPerms] = useState<Permission[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showMatrix, setShowMatrix] = useState(false);
 
   // Fetch users from Supabase API
   const fetchUsers = async () => {
@@ -283,6 +336,26 @@ export default function UsersPage() {
       showToast("Network error");
     }
     setConfirmDelete(null);
+  }
+
+  async function handleSavePerms(id: string) {
+    try {
+      const res = await fetch(`/api/sentinel_users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions: draftPerms }),
+      });
+      if (res.ok) {
+        await fetchUsers();
+        showToast("Permissions updated successfully");
+      } else {
+        showToast("Failed to update permissions");
+      }
+    } catch {
+      showToast("Network error");
+    }
+    setEditPermsUser(null);
+    setShowPerms(null);
   }
 
   async function handleToggleStatus(id: string) {
@@ -558,6 +631,101 @@ export default function UsersPage() {
           </select>
         </div>
 
+        {/* Role Access Matrix Toggle */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", display: "flex", alignItems: "center", justifyContent: "center", color: "#6366f1" }}>
+              <Shield size={16} />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)" }}>Role-Based Access Control</div>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>See exactly what each role can access across modules</div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowMatrix(v => !v)}
+            style={{
+              display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 10,
+              border: showMatrix ? "1px solid rgba(99,102,241,0.4)" : "1px solid var(--border-strong)",
+              background: showMatrix ? "rgba(99,102,241,0.08)" : "var(--bg-input)",
+              color: showMatrix ? "#6366f1" : "var(--text-secondary)", fontSize: 12.5, fontWeight: 700,
+              cursor: "pointer", transition: "all 0.15s",
+            }}
+          >
+            <ShieldCheck size={15} />
+            {showMatrix ? "Hide Access Matrix" : "View Access Matrix"}
+            <ChevronDown size={14} style={{ transform: showMatrix ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+          </button>
+        </div>
+
+        {/* Role Access Matrix Panel */}
+        {showMatrix && (
+          <div className="table-card" style={{ marginBottom: 20, overflowX: "auto" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <ShieldCheck size={16} style={{ color: "#059669" }} />
+                <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>Module Access by Role</span>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {(["full", "edit", "view", "none"] as AccessLevel[]).map(lvl => (
+                  <div key={lvl} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--text-muted)", fontWeight: 600 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 4, background: ACCESS_LEVEL_META[lvl].bg, border: `1px solid ${ACCESS_LEVEL_META[lvl].color}55`, display: "inline-block" }} />
+                    {ACCESS_LEVEL_META[lvl].label === "—" ? "No access" : ACCESS_LEVEL_META[lvl].label}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <table style={{ minWidth: 780 }}>
+              <thead>
+                <tr>
+                  <th style={{ minWidth: 200 }}>Module</th>
+                  {(["admin", "manager", "operator", "viewer"] as User["role"][]).map(r => {
+                    const cfg = ROLE_CONFIG[r];
+                    return (
+                      <th key={r} style={{ textAlign: "center" }}>
+                        <span className="role-badge" style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                          {cfg.icon} {cfg.label}
+                        </span>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {MODULE_ACCESS.map(mod => (
+                  <tr key={mod.id}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                        <span style={{ color: "var(--text-muted)", display: "flex", alignItems: "center", width: 18 }}>{mod.icon}</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{mod.label}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{mod.desc}</div>
+                        </div>
+                      </div>
+                    </td>
+                    {(["admin", "manager", "operator", "viewer"] as User["role"][]).map(r => {
+                      const lvl = mod.byRole[r];
+                      const meta = ACCESS_LEVEL_META[lvl];
+                      const isNone = lvl === "none";
+                      return (
+                        <td key={r} style={{ textAlign: "center" }}>
+                          <span style={{
+                            display: "inline-block", minWidth: 64, padding: "5px 12px", borderRadius: 7,
+                            background: meta.bg, color: meta.color, fontSize: 11, fontWeight: 700,
+                            border: `1px solid ${meta.color}33`, opacity: isNone ? 0.7 : 1,
+                          }}>
+                            {meta.label}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Users Table */}
         <div className="table-card">
           <table>
@@ -685,26 +853,84 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Permissions Modal */}
+      {/* Permissions Modal (editable — per-user permission editor) */}
       {showPerms && (
-        <div className="overlay" onClick={() => setShowPerms(null)}>
+        <div className="overlay" onClick={() => { setShowPerms(null); setEditPermsUser(null); }}>
           <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: "24px 24px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>Permissions</h2>
+                <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>User Permissions</h2>
                 <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
                   {users.find((u) => u.id === showPerms)?.name} &mdash; {ROLE_CONFIG[users.find((u) => u.id === showPerms)?.role || "viewer"].label}
                 </p>
               </div>
-              <button onClick={() => setShowPerms(null)} style={{ background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--text-secondary)" }}>
+              <button onClick={() => { setShowPerms(null); setEditPermsUser(null); }} style={{ background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--text-secondary)" }}>
                 <X size={16} />
               </button>
+            </div>
+            <div style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderBottom: "1px solid var(--border)", background: "var(--bg-input)" }}>
+              <div style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 700 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Role grants {ROLE_PERMISSIONS[users.find((u) => u.id === showPerms)?.role || "viewer"].length} permissions.</span>{" "}
+                Tap any box to grant / revoke a permission for this user.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    const u = users.find(x => x.id === showPerms);
+                    setDraftPerms(u ? [...ROLE_PERMISSIONS[u.role]] as Permission[] : [...ROLE_PERMISSIONS.viewer] as Permission[]);
+                  }}
+                  style={{ fontSize: 11.5, fontWeight: 700, color: "#6366f1", background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}
+                >Reset to role default</button>
+                <button
+                  onClick={() => setDraftPerms(ALL_PERMISSIONS.map(p => p.key) as Permission[])}
+                  style={{ fontSize: 11.5, fontWeight: 700, color: "#059669", background: "rgba(5,150,105,0.1)", border: "1px solid rgba(5,150,105,0.3)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}
+                >Grant all</button>
+              </div>
             </div>
             <div style={{ padding: 24 }}>
               {(() => {
                 const user = users.find((u) => u.id === showPerms);
                 if (!user) return null;
-                const perms = user.permissions;
+                const full: Permission[] = (user.permissions || []) as Permission[];
+                if (editPermsUser === user.id) {
+                  const perms = draftPerms;
+                  const categories = [...new Set(ALL_PERMISSIONS.map((p) => p.category))];
+                  const toggle = (key: Permission) => {
+                    setDraftPerms(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+                  };
+                  return (
+                    <>
+                      <div>
+                        {categories.map((cat) => (
+                          <div key={cat}>
+                            <div className="perm-cat">{cat}</div>
+                            <div className="perm-grid" style={{ marginBottom: 8 }}>
+                              {ALL_PERMISSIONS.filter((p) => p.category === cat).map((p) => {
+                                const has = perms.includes(p.key);
+                                return (
+                                  <div key={p.key} onClick={() => toggle(p.key)} className={`perm-item ${has ? "active" : ""}`} role="button" aria-pressed={has}>
+                                    {has ? <Check size={13} style={{ color: "#059669", flexShrink: 0 }} /> : <X size={13} style={{ color: "var(--text-muted)", opacity: 0.4, flexShrink: 0 }} />}
+                                    <span style={{ flex: 1 }}>{p.label}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 18, borderTop: "1px solid var(--border)", marginTop: 8 }}>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>
+                          {perms.length} / {ALL_PERMISSIONS.length} permissions granted
+                        </div>
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <button onClick={() => { setEditPermsUser(null); setDraftPerms(full); }} style={{ padding: "9px 18px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+                          <button onClick={() => handleSavePerms(user.id)} style={{ padding: "9px 22px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(99,102,241,0.3)" }}>Save Permissions</button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                }
+                const perms = full;
                 const categories = [...new Set(ALL_PERMISSIONS.map((p) => p.category))];
                 return (
                   <div>
@@ -724,6 +950,14 @@ export default function UsersPage() {
                         </div>
                       </div>
                     ))}
+                    <div style={{ textAlign: "right", paddingTop: 16, borderTop: "1px solid var(--border)", marginTop: 8 }}>
+                      <button
+                        onClick={() => { setEditPermsUser(user.id); setDraftPerms(full); }}
+                        style={{ padding: "10px 22px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(99,102,241,0.3)" }}
+                      >
+                        <Edit3 size={13} style={{ marginRight: 6, verticalAlign: "-2px" }} /> Edit Permissions
+                      </button>
+                    </div>
                   </div>
                 );
               })()}
@@ -786,6 +1020,7 @@ function UserForm({ user, onSave, onCancel }: { user: User | null; onSave: (data
   const [role, setRole] = useState<User["role"]>(user?.role || "viewer");
   const [department, setDepartment] = useState(user?.department || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function validate() {
@@ -794,13 +1029,19 @@ function UserForm({ user, onSave, onCancel }: { user: User | null; onSave: (data
     if (!email.trim()) errs.email = "Email is required";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Invalid email";
     if (!department) errs.department = "Department is required";
+    if (!user && !password.trim()) errs.password = "Password is required for new users";
+    else if (password && password.length < 6) errs.password = "Password must be at least 6 characters";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
   function handleSubmit() {
     if (validate()) {
-      onSave({ name: name.trim(), email: email.trim(), role, department, phone: phone.trim() });
+      const payload: Partial<User> & { password?: string } = {
+        name: name.trim(), email: email.trim(), role, department, phone: phone.trim(),
+      };
+      if (password.trim()) payload.password = password.trim();
+      onSave(payload);
     }
   }
 
@@ -818,16 +1059,44 @@ function UserForm({ user, onSave, onCancel }: { user: User | null; onSave: (data
           {errors.email && <span style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>{errors.email}</span>}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <div>
-          <label className="field-label">Role *</label>
-          <select className="field" value={role} onChange={(e) => setRole(e.target.value as User["role"])}>
-            <option value="admin">Admin</option>
-            <option value="manager">Manager</option>
-            <option value="operator">Operator</option>
-            <option value="viewer">Viewer</option>
-          </select>
+      <div style={{ marginBottom: 16 }}>
+        <label className="field-label">Role *</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+          {(["admin", "manager", "operator", "viewer"] as User["role"][]).map(r => {
+            const cfg = ROLE_CONFIG[r];
+            const perms = ROLE_PERMISSIONS[r];
+            const access = MODULE_ACCESS.reduce((acc, m) => {
+              const lvl = m.byRole[r];
+              if (lvl === "full") acc.full++;
+              else if (lvl === "edit") acc.edit++;
+              else if (lvl === "view") acc.view++;
+              return acc;
+            }, { full: 0, edit: 0, view: 0 });
+            const selected = role === r;
+            return (
+              <button
+                type="button"
+                key={r}
+                onClick={() => setRole(r)}
+                style={{
+                  textAlign: "left", padding: "11px 12px", borderRadius: 10, cursor: "pointer",
+                  border: selected ? `1.5px solid ${cfg.color}` : "1px solid var(--border-strong)",
+                  background: selected ? cfg.bg : "var(--bg-input)",
+                  transition: "all 0.15s", display: "flex", flexDirection: "column", gap: 3,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: cfg.color, fontWeight: 800, fontSize: 12.5 }}>
+                  {cfg.icon} {cfg.label}
+                </div>
+                <div style={{ fontSize: 10.5, color: "var(--text-muted)", fontWeight: 600, lineHeight: 1.4 }}>
+                  {perms.length} perms · {access.edit + access.full} modules editable
+                </div>
+              </button>
+            );
+          })}
         </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         <div>
           <label className="field-label">Department *</label>
           <select className="field" value={department} onChange={(e) => setDepartment(e.target.value)}>
@@ -836,26 +1105,52 @@ function UserForm({ user, onSave, onCancel }: { user: User | null; onSave: (data
           </select>
           {errors.department && <span style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>{errors.department}</span>}
         </div>
+        <div>
+          <label className="field-label">Phone</label>
+          <input className="field" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </div>
       </div>
-      <div style={{ marginBottom: 20 }}>
-        <label className="field-label">Phone</label>
-        <input className="field" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <div style={{ marginBottom: 16 }}>
+        <label className="field-label">Password {user && "(leave blank to keep current)"}</label>
+        <input
+          className="field"
+          type="text"
+          autoComplete="new-password"
+          placeholder={user ? "Enter new password (optional)" : "Set a login password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <span style={{ fontSize: 10.5, color: "var(--text-muted)", display: "block", marginTop: 4 }}>
+          Users sign in with this password on the login page (along with their email and role).
+        </span>
+        {errors.password && <span style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>{errors.password}</span>}
       </div>
 
-      {/* Role Permissions Preview */}
+      {/* Role Module Access Preview */}
       <div style={{ marginBottom: 20 }}>
-        <label className="field-label" style={{ marginBottom: 8 }}>Role Permissions ({ROLE_PERMISSIONS[role].length} permissions)</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {ROLE_PERMISSIONS[role].map((p) => (
-            <span key={p} style={{
-              padding: "3px 8px", borderRadius: 6,
-              fontSize: 10.5, fontWeight: 600,
-              background: "var(--violet-soft)", color: "var(--violet)",
-              border: "1px solid var(--violet-glow)",
-            }}>
-              {p.split(".").pop()}
-            </span>
-          ))}
+        <label className="field-label" style={{ marginBottom: 8 }}>
+          Access Preview — {ROLE_CONFIG[role].label} ({ROLE_PERMISSIONS[role].length} permissions)
+        </label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {MODULE_ACCESS.map(m => {
+            const lvl = m.byRole[role];
+            const meta = ACCESS_LEVEL_META[lvl];
+            if (lvl === "none") return null;
+            return (
+              <span key={m.id} style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "4px 9px", borderRadius: 7,
+                background: meta.bg, color: meta.color,
+                border: `1px solid ${meta.color}33`,
+                fontSize: 10.5, fontWeight: 700,
+              }}>
+                {m.icon} {m.label} · {meta.label}
+              </span>
+            );
+          })}
+          {MODULE_ACCESS.every(m => m.byRole[role] === "none") && (
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>No module access</span>
+          )}
         </div>
       </div>
 

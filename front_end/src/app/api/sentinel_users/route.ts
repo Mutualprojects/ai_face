@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, role, department, phone, status } = body;
+    const { name, email, role, department, phone, status, password, modules } = body;
 
     if (!name?.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (!email?.trim()) return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -66,6 +66,8 @@ export async function POST(request: NextRequest) {
         department: department || "",
         phone: phone || "",
         status: status || "active",
+        password: password || null,
+        modules: Array.isArray(modules) ? modules : null,
       })
       .select()
       .single();

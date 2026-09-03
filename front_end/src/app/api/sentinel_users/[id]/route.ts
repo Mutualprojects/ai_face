@@ -41,7 +41,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, email, role, department, phone, status } = body;
+    const { name, email, role, department, phone, status, password, modules, permissions } = body;
 
     const updates: Record<string, any> = {};
     if (name !== undefined) updates.name = name.trim();
@@ -50,6 +50,9 @@ export async function PUT(
     if (department !== undefined) updates.department = department;
     if (phone !== undefined) updates.phone = phone;
     if (status !== undefined) updates.status = status;
+    if (password !== undefined) updates.password = password;
+    if (modules !== undefined) updates.modules = Array.isArray(modules) ? modules : null;
+    if (permissions !== undefined) updates.permissions = Array.isArray(permissions) ? permissions : null;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });

@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useAuth } from "./AuthProvider";
+import { effectiveNavForRole, normalizeSessionRole } from "@/lib/roleAccess";
 
 const NAV_ITEMS = [
   {
@@ -226,6 +228,21 @@ const NAV_ITEMS = [
     activeColor: "#f43f5e",
     activeBg: "rgba(244,63,94,0.08)",
   },
+  {
+    label: "Roles",
+    id: "roles",
+    href: "/roles",
+    shortcut: "R",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+        <path d="m9 12 2 2 4-4"/>
+      </svg>
+    ),
+    gradient: "linear-gradient(135deg, #f59e0b, #ef4444)",
+    activeColor: "#f59e0b",
+    activeBg: "rgba(245,158,11,0.08)",
+  },
 ];
 
 interface SidebarProps {
@@ -238,8 +255,20 @@ interface SidebarProps {
 export default function Sidebar({ isOpen = false, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { session } = useAuth();
   const [search, setSearch] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // ── Dynamic, role-based navigation ──────────────────────────
+  // Which nav items the logged-in user may see is derived from their role
+  // (and any per-user module override set in User Management).
+  const allowedModules = effectiveNavForRole(
+    normalizeSessionRole(session?.role),
+    session?.modules
+  );
+  const visibleNav = NAV_ITEMS.filter(item =>
+    (allowedModules as readonly string[]).includes(item.id)
+  );
 
   let activeId = "dashboard";
   if (pathname === "/dashboard") activeId = "dashboard";
@@ -251,6 +280,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
   else if (pathname === "/analytics") activeId = "analytics";
   else if (pathname === "/sdk") activeId = "manage-sdk";
   else if (pathname === "/users") activeId = "users";
+  else if (pathname === "/roles") activeId = "roles";
   else if (pathname === "/public-api") activeId = "public-api";
   else if (pathname === "/") activeId = searchParams.get("tab") || "register";
 
@@ -280,7 +310,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
     return () => clearInterval(iv);
   }, []);
 
-  const filtered = NAV_ITEMS.filter(i =>
+  const filtered = visibleNav.filter(i =>
     i.label.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -608,6 +638,14 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
               </Link>
             );
           })}
+          {filtered.length === 0 && (
+            <div style={{
+              padding: "20px 14px", textAlign: "center",
+              fontSize: 11.5, color: "var(--text-muted)",
+            }}>
+              No modules available for your role.
+            </div>
+          )}
         </nav>
 
         {/* ── DB Size Widget ── */}
@@ -670,14 +708,15 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 11, fontWeight: 900, color: "#fff", flexShrink: 0,
               boxShadow: "0 3px 10px rgba(99,102,241,0.3)",
-            }}>SA</div>
+            }}>{(session?.full_name || session?.email || "U").trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "U"}</div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)",
                 lineHeight: 1.2, letterSpacing: "-0.02em",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               }}>
-                Admin
+                {session?.full_name || session?.email || "Guest"}
               </div>
               <div style={{
                 fontSize: 10, color: "var(--text-muted)",
@@ -691,7 +730,7 @@ export default function Sidebar({ isOpen = false, onClose, collapsed = false, on
                   flexShrink: 0, display: "inline-block",
                   animation: "statusBreathe 2s ease-in-out infinite",
                 }} />
-                System Online
+                {(session?.role || "guest").replace("_", " ").toUpperCase()} · {session?.department || "System"}
               </div>
             </div>
 

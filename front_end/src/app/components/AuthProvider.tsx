@@ -12,10 +12,12 @@ import { useRouter, usePathname } from "next/navigation";
 export interface SentinelSession {
   access_token: string;
   user: { id: string; email: string };
-  role: "super_admin" | "admin" | "viewer";
+  role: "super_admin" | "admin" | "manager" | "operator" | "viewer";
   full_name: string;
   email: string;
   department: string;
+  /** Optional per-user module/feature override (set in User Management). */
+  modules?: string[];
   logged_in_at: number;
 }
 

@@ -138,12 +138,48 @@ pathDefaults:
   srtPublishPassphrase: null
   srtReadPassphrase: null
 paths:
-  '11':
+  '2':
     runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
       nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
-      100000 -rtsp_transport tcp -i 'rtsp://100.64.192.94:8554/11' -c:v libx264 -preset
-      ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g 15 -keyint_min 15 -sc_threshold
-      0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c06/s0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  '3':
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c10/s0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  '33':
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:admin@172.23.0.79:554/rtsp/streaming?channel=01&subtype=0'
+      -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g
+      15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  '4':
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c08/s0'
+      -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt yuv420p -g
+      15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnDemandCloseAfter: 10s
+    runOnDemandRestart: true
+    source: publisher
+  '5':
+    runOnDemand: /usr/bin/ffmpeg -hide_banner -avoid_negative_ts make_zero -fflags
+      nobuffer+discardcorrupt -flags low_delay -analyzeduration 100000 -probesize
+      100000 -rtsp_transport tcp -i 'rtsp://admin:Brihaspathi%24123@172.23.0.100:554/unicast/c12/s0'
+      -vf scale=1280:-2 -c:v libx264 -preset ultrafast -tune zerolatency -crf 20 -pix_fmt
+      yuv420p -g 15 -keyint_min 15 -sc_threshold 0 -an -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnDemandCloseAfter: 10s
     runOnDemandRestart: true
     source: publisher

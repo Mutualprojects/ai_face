@@ -8,31 +8,8 @@ import styles from "./login.module.css";
 import securityIll from "./cybersecurity-concept-illustration.png";
 
 /* ─── STATIC LOGIN HELPERS ─────────────────────────────────────────────────── */
-// Static authentication — credentials are checked directly in the browser,
-// no Supabase Auth / database round-trip required. Update these to change the
-// default login. The form is pre-filled with these same values.
-const STATIC_USERS: Record<string, { password: string; role: string; full_name: string; department: string }> = {
-  "superadmin@sentinel.local": {
-    password: "Admin@1234",
-    role: "super_admin",
-    full_name: "Super Admin",
-    department: "IT",
-  },
-};
-
-function verifyStaticLogin(email: string, password: string) {
-  const key = String(email || "").trim().toLowerCase();
-  const u = STATIC_USERS[key];
-  if (!u) throw new Error("Invalid email or password");
-  if (u.password !== password) throw new Error("Invalid email or password");
-  return {
-    id: `SUPERADMIN-${Date.now()}`,
-    email: String(email).trim(),
-    full_name: u.full_name,
-    department: u.department,
-    role: u.role,
-  };
-}
+/* (Login now authenticates against DB-managed sentinel_users via
+   /api/auth/login. Super-admin bootstrap is handled server-side.) */
 
 export default function LoginPage() {
   const router = useRouter();
@@ -92,17 +69,27 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const account = verifyStaticLogin(email, password);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Authentication failed. Please try again.");
+      }
 
       setSuccess(true);
       setTimeout(() => {
         authLogin({
-          access_token: `sentinel-static-${Date.now()}`,
-          user: { id: account.id, email: account.email },
-          role: account.role as "super_admin" | "admin" | "viewer",
-          full_name: account.full_name,
-          email: account.email,
-          department: account.department,
+          access_token: `sentinel-${Date.now()}`,
+          user: { id: data.id, email: data.email },
+          role: (data.role as "super_admin" | "admin" | "manager" | "operator" | "viewer") || "viewer",
+          full_name: data.full_name || data.email,
+          email: data.email,
+          department: data.department || "",
+          modules: Array.isArray(data.modules) ? data.modules : undefined,
           logged_in_at: Date.now(),
         });
       }, 300);
